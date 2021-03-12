@@ -1,0 +1,7 @@
+.idea/
+*__pycache__*
+*.log
+rest-api.http
+.env.local
+*.pyc
+Makefile
