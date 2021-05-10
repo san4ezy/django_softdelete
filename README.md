@@ -21,6 +21,8 @@ pip install django-softdelete
 Add the `SoftDeleteModel` as a parent for your model:
 ```python
 # For regular model
+from django_softdelete.models import SoftDeleteModel
+
 class Article(SoftDeleteModel):
     title = models.CharField(max_length=100)
     
@@ -34,6 +36,8 @@ class Article(SoftDeleteModel):
 
 
 # For inherited model
+from django_softdelete.models import SoftDeleteModel
+
 class Post(SoftDeleteModel, SomeParentModelClass):
     title = models.CharField(max_length=100)
 ```
@@ -47,15 +51,15 @@ Make and apply the migrations:
 ## Quick example
 
 ```python
-a1 = Article.objects.create(title='Django')
-a2 = Article.objects.create(title='Django')
-a3 = Article.objects.create(title='Django')
+a1 = Article.objects.create(title='django')
+a2 = Article.objects.create(title='python')
+a3 = Article.objects.create(title='django_softdelete')
 Article.objects.count()  # 3
 
 a1.delete()  # soft deletion of object
 Article.objects.count()  # 2
 
-deleted_a1 = Article.deleted_objects.first()  # <Article: 'Django'>
+deleted_a1 = Article.deleted_objects.first()  # <Article: 'django'>
 deleted_a1.restore()  # restores deleted object
 Article.objects.count()  # 3
 Article.deleted_objects.count()  # 0
@@ -70,6 +74,8 @@ If you need a soft delete functionality for model with your own object manager,
 you want to extend it with the `SoftDeleteManager`.
 
 ```python
+from django_softdelete.models import SoftDeleteManager
+
 class YourOwnManager(SoftDeleteManager):
     pass
 ```
@@ -82,6 +88,8 @@ If you need to use soft delete functionality for your custom `QuerySet`, use the
 `SoftDeleteQuerySet` as a parent class or extending existing one.
 
 ```python
+from django_softdelete.models import SoftDeleteQuerySet
+
 class YourOwnQuerySet(SoftDeleteQuerySet):
     pass
 ```
