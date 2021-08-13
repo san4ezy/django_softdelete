@@ -11,7 +11,7 @@ alive and deleted objects accordingly.
 By default, the `SoftDeleteModel` has `objects` attribute as `SoftDeleteManager` and
 `deleted_objects` attribute as `DeletedManager`.
 
-## Installation
+## How to use
 
 ```
 pip install django-softdelete
@@ -47,6 +47,10 @@ Make and apply the migrations:
 ./manage.py makemigrations
 ./manage.py migrate
 ```
+
+## Relations
+
+You can also use soft deletion for models that are related to others. This library does not interfere with standard Django functionality. This means that you can also use cascading delete, but remember that soft delete only works with the `SoftDeleteModel` classes. If you delete an instance of the parent model and use cascading delete, then the instances of the child model will be hard-deleted. To prevent hard deletion in this case, you should use `SoftDeleteModel` for child models in the same way as for parent model. 
 
 ## Quick example
 
