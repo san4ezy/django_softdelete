@@ -19,7 +19,7 @@ pip install django-soft-delete
 
 Enable `django_softdelete` in your settings file:
 
-```
+```python
 INSTALLED_APPS = [
     ...
     'django_softdelete',
