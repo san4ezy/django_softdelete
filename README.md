@@ -14,11 +14,11 @@ By default, the `SoftDeleteModel` has `objects` attribute as `SoftDeleteManager`
 ## How to use
 
 ```
-pip install django-softdelete
+pip install django-soft-delete
 ```
 
-
 Add the `SoftDeleteModel` as a parent for your model:
+
 ```python
 # For regular model
 from django_softdelete.models import SoftDeleteModel
