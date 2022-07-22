@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django_softdelete import services
 
 
 class SoftDeleteQuerySet(models.query.QuerySet):
@@ -40,6 +41,9 @@ class SoftDeleteModel(models.Model):
         self.is_deleted = True
         self.deleted_at = timezone.now()
         self.save()
+
+    def delete_relations_include(self, *args, **kwargs):
+        services.soft_delete_user(self)
 
     def restore(self):
         self.is_deleted = False

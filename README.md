@@ -68,6 +68,7 @@ deleted_a1.restore()  # restores deleted object
 Article.objects.count()  # 3
 Article.deleted_objects.count()  # 0
 
+a1.delete_relations_include()  # delete all related and soft deletion of object 
 a1.hard_delete()  # deletes the object at all.
 
 ```
