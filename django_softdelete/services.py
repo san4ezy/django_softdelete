@@ -10,28 +10,14 @@ def soft_delete_user(user):
     :param user: User to be deleted
     :return:
     """
+    # Important user data
 
-    user.phone_number = ""
-    user.email = ""
-    user.first_name = ""
-    user.last_name = ""
-    user.username = ""
-    user.birth_date = ""
-    user.ssn = ""
-    user.feedback_counter = 0
-    if user.avatar:
-        user.avatar.delete()
-    user.verification_code = ""
-    user.is_active = False
-    user.is_verified = False
-    user.is_disabled = True
-    if user.company:
-        user.company = None
-    user.is_social_login = False
-    user.social_login_type = "" 
-    user.social_user_id = ""
-    user.stripe_customer_id = ""
-    user.stripe_connected_account_id = ""
+    # user.phone_number = ""
+    # user.email = ""
+    # user.first_name = ""
+    # user.last_name = ""
+    # user.username = ""
+    # user.birth_date = ""
 
     user.is_deleted = True
     user.deleted_at = timezone.now()
