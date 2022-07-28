@@ -6,7 +6,7 @@ EXCLUDE_DELETE_RELATIONS = ['transactions_sent', 'transactions_received']
 
 def soft_delete_user(user):
     """
-    Soft delete a user but keep transactions and id for tracking purposes.
+    Soft delete a user but keep exclude relation for tracking purposes.
     :param user: User to be deleted
     :return:
     """

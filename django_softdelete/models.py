@@ -7,6 +7,10 @@ class SoftDeleteQuerySet(models.query.QuerySet):
     def delete(self):
         return self.update(is_deleted=True, deleted_at=timezone.now())
 
+    def delete_relations_include(self):
+        for user in self:
+            services.soft_delete_user(user)
+
     def hard_delete(self):
         return super().delete()
 
