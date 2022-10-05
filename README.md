@@ -14,7 +14,7 @@ By default, the `SoftDeleteModel` has `objects` attribute as `SoftDeleteManager`
 ## Installation
 
 ```
-pip install django-softdelete
+pip install django-soft-delete
 ```
 
 
@@ -62,6 +62,13 @@ Article.deleted_objects.count()  # 0
 
 a1.hard_delete()  # deletes the object at all.
 
+```
+
+## Batch deletion
+
+```python
+Article.objects.filter(some_value=True).delete()  # soft delete for all filtered objects
+Article.deleted_objects.filter(some_value=True).restore()  # restore for all filtered objects
 ```
 
 ## Custom manager
