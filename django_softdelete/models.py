@@ -24,7 +24,7 @@ class SoftDeleteQuerySet(models.query.QuerySet):
 
 class SoftDeleteManager(models.Manager):
     def get_queryset(self):
-        return SoftDeleteQuerySet(self.model, self._db).filter(is_deleted=False)
+        return SoftDeleteQuerySet(self.model, using=self._db).filter(is_deleted=False)
 
 
 class DeletedQuerySet(models.query.QuerySet):
@@ -35,7 +35,7 @@ class DeletedQuerySet(models.query.QuerySet):
 
 class DeletedManager(models.Manager):
     def get_queryset(self):
-        return DeletedQuerySet(self.model, self._db).filter(is_deleted=True)
+        return DeletedQuerySet(self.model, using=self._db).filter(is_deleted=True)
 
 
 class GlobalManager(models.Manager):
