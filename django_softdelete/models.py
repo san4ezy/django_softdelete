@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from django.conf import settings
-
+from django.db.models.fields.related_descriptors import ReverseManyToOneDescriptor, ReverseOneToOneDescriptor
 
 def get_settings():
     default_settings = dict(
@@ -77,7 +77,15 @@ class SoftDeleteModel(models.Model):
         super().delete(*args, **kwargs)
 
     def get_related_objects(self):
-        return []
+        attributes = vars(self._meta.model)
+        reverse_attributes = [a for a, b in attributes.items() if type(b) in [ReverseManyToOneDescriptor, ReverseOneToOneDescriptor]]
+        related_objects = []
+        for reverse_attribute in reverse_attributes:
+            try:
+                related_objects.extend(list(getattr(self, reverse_attribute).all()))
+            except:
+                pass
+        return related_objects
 
     def delete_related_objects(self):
         for obj in self.get_related_objects():
