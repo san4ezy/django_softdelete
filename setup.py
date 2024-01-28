@@ -6,14 +6,16 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="django-soft-delete",
-    version="0.9.21",
+    version="1.0.1",
     author="Alexander Yudkin",
     author_email="san4ezy@gmail.com",
     description="Soft delete models, managers, queryset for Django",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/san4ezy/django_softdelete",
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages(
+        include=["django_softdelete", "django_softdelete.*"]
+    ),
     include_package_data=True,
     classifiers=[
         'Environment :: Web Environment',

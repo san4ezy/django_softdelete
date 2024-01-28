@@ -21,6 +21,7 @@ Add the `SoftDeleteModel` as a parent for your model:
 
 ```python
 # For regular model
+from django.db import models
 from django_softdelete.models import SoftDeleteModel
 
 class Article(SoftDeleteModel):
@@ -33,6 +34,7 @@ class Article(SoftDeleteModel):
     # Following managers will be added automatically
     # objects = SoftDeleteManager()
     # deleted_objects = DeletedManager()
+    # global_objects = GlobalManager()
 
 
 # For inherited model

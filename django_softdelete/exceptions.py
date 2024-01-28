@@ -1,0 +1,2 @@
+class SoftDeleteException(Exception):
+    pass
