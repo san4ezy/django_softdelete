@@ -33,6 +33,6 @@ class GlobalObjectsModelAdmin(admin.ModelAdmin):
         return qs
 
     def get_list_filter(self, request):
-        list_filter = super().get_list_filter(request)
+        list_filter = list(super().get_list_filter(request))
         list_filter.append(SoftDeleteFilter)
         return list_filter
