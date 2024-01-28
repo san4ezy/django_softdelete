@@ -1,5 +1,7 @@
 from django.contrib import admin
 
+from django_softdelete.filters import SoftDeleteFilter
+
 
 class SoftDeletedModelAdmin(admin.ModelAdmin):
     """
@@ -8,7 +10,7 @@ class SoftDeletedModelAdmin(admin.ModelAdmin):
     The standard ModelAdmin works with a default object manager as well.
     """
     def get_queryset(self, request):
-        super().get_queryset()
+        super().get_queryset(request)
         qs = self.model.deleted_objects.get_queryset()
         ordering = self.get_ordering(request)
         if ordering:
@@ -23,9 +25,14 @@ class GlobalObjectsModelAdmin(admin.ModelAdmin):
     The standard ModelAdmin works with a default object manager as well.
     """
     def get_queryset(self, request):
-        super().get_queryset()
+        super().get_queryset(request)
         qs = self.model.global_objects.get_queryset()
         ordering = self.get_ordering(request)
         if ordering:
             qs = qs.order_by(*ordering)
         return qs
+
+    def get_list_filter(self, request):
+        list_filter = super().get_list_filter(request)
+        list_filter.append(SoftDeleteFilter)
+        return list_filter

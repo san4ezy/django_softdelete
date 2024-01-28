@@ -1,3 +1,4 @@
+from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
 from django.db import transaction
 from django.db.models.deletion import ProtectedError
@@ -72,7 +73,7 @@ class SoftDeleteModel(models.Model):
         super().delete(*args, **kwargs)
         post_hard_delete.send(sender=self.__class__, instance=self)
 
-    def delete(self, strict: bool = True, *args, **kwargs):
+    def delete(self, strict: bool = False, *args, **kwargs):
         """
         Delete the object and all related objects.
 
@@ -87,6 +88,11 @@ class SoftDeleteModel(models.Model):
         now = timezone.now()
         with transaction.atomic():
             for field in self._meta.get_fields():
+
+                # Skip generic relations
+                if isinstance(field, GenericRelation):
+                    continue
+
                 RelatedModel = field.related_model
 
                 if not RelatedModel:
@@ -140,6 +146,11 @@ class SoftDeleteModel(models.Model):
         now = timezone.now()
         with transaction.atomic():
             for field in self._meta.get_fields():
+
+                # Skip generic relations
+                if isinstance(field, GenericRelation):
+                    continue
+
                 RelatedModel = field.related_model
                 if not RelatedModel:
                     continue
