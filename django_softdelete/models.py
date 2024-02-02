@@ -144,6 +144,8 @@ class SoftDeleteModel(models.Model):
         """
 
         now = timezone.now()
+        self.deleted_at = None
+        self.restored_at = now
         with transaction.atomic():
             for field in self._meta.get_fields():
 
@@ -177,9 +179,6 @@ class SoftDeleteModel(models.Model):
 
                 else:
                     continue
-
-            self.deleted_at = None
-            self.restored_at = now
             self.save(
                 update_fields=['deleted_at', 'restored_at', ]
             )
