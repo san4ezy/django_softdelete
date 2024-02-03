@@ -72,7 +72,7 @@ class SoftDeleteManager(models.Manager):
         :return: A queryset that filters out objects with a non-null `deleted_at` field.
         :rtype: SoftDeleteQuerySet
         """
-        return SoftDeleteQuerySet(self.model, self._db).filter(
+        return SoftDeleteQuerySet(self.model, using=self._db).filter(
             deleted_at__isnull=True
         )
 
@@ -100,7 +100,7 @@ class DeletedManager(models.Manager):
         :return: A query set containing the deleted records.
         :rtype: DeletedQuerySet
         """
-        return DeletedQuerySet(self.model, self._db).filter(
+        return DeletedQuerySet(self.model, using=self._db).filter(
             deleted_at__isnull=False
         )
 

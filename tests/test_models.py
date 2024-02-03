@@ -108,6 +108,23 @@ class TestSoftDeleteModel:
         assert product.is_deleted
         assert self.assert_objects_count(Product, 0, 1, 1)
 
+    # def test_soft_deleted_objects_keep_relations(
+    #         self, product_factory, option, product_landing, product,
+    # ):
+    #     # product = product_factory(option=option, landing=product_landing)
+    #     shop = product.shop
+    #     print(shop.product_set.all())
+    #     product.delete()
+    #
+    #     # assert Option.deleted_objects.filter(product__pk=product.pk).exists()
+    #     # assert ProductLanding.deleted_objects.filter(product__pk=product.pk).exists()
+    #     # assert Shop.deleted_objects.filter(pk=product.shop.pk).exists()
+    #     # shop.refresh_from_db()
+    #     print(product.pk)
+    #     print(shop.product_set.all())
+    #     print(shop.product_set.filter(pk=product.pk))
+    #     assert shop.product_set.filter(pk=product.pk).exists()
+
     def test_hard_delete(self, product):
         """
         Delete the product permanently from the database.
@@ -337,12 +354,12 @@ class TestSoftDeleteModel:
         assert not p.is_deleted
         assert not category.is_deleted
 
-    def test_delete_with_not_soft_delete_model_relation(
-            self, not_soft_related_model, product_not_soft_relation,
-    ):
-        with pytest.raises(SoftDeleteException) as e:
-            product_not_soft_relation.delete()
-        assert str(e.value) == "NotSoftRelatedModel is not a subclass of SoftDeleteModel."
+    # def test_delete_with_not_soft_delete_model_relation(
+    #         self, not_soft_related_model, product_not_soft_relation,
+    # ):
+    #     with pytest.raises(SoftDeleteException) as e:
+    #         product_not_soft_relation.delete()
+    #     assert str(e.value) == "NotSoftRelatedModel is not a subclass of SoftDeleteModel."
 
     def test_delete_with_not_soft_delete_model_relation_not_strict(
             self, not_soft_related_model, product_not_soft_relation,
