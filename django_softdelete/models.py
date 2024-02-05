@@ -6,9 +6,9 @@ from django.db.models.signals import pre_delete, post_delete
 from django.utils import timezone
 
 from django_softdelete.exceptions import SoftDeleteException
-from django_softdelete.managers import SoftDeleteManager
 from django_softdelete.managers import DeletedManager
 from django_softdelete.managers import GlobalManager
+from django_softdelete.managers import SoftDeleteManager
 from django_softdelete.signals import post_hard_delete, post_soft_delete, post_restore
 
 
@@ -292,12 +292,13 @@ class SoftDeleteModel(models.Model):
         :return: None
         :rtype: None
         """
-        related_object.restore(strict=strict, *args, **kwargs)
-        try:
-            if related_object.pk is not None:
-                related_object.save()
-        except AttributeError:
-            pass
+        if related_object.is_deleted:
+            related_object.restore(strict=strict, *args, **kwargs)
+            try:
+                if related_object.pk is not None:
+                    related_object.save()
+            except AttributeError:
+                pass
 
     def __delete_related_one_to_one(self, field, strict, *args, **kwargs):
         """
