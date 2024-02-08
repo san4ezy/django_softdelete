@@ -237,11 +237,20 @@ class SoftDeleteModel(models.Model):
                 related_object.save()
 
             case models.PROTECT:
+                related_query_name = (field.remote_field.related_query_name or
+                                      field.remote_field.related_name or
+                                      field.opts.model_name)
+
+                if callable(related_query_name):
+                    related_query_name = related_query_name()
+
                 if related_object:
+                    related_manager_name = related_query_name if hasattr(self,
+                                                                         related_query_name) else f"{related_query_name}_set"
+                    protected_objects = list(getattr(self, related_manager_name).all())
                     raise ProtectedError(
-                        f"Cannot delete {self} because {related_object} "
-                        f"is related with PROTECT",
-                        [related_object]
+                        f"Cannot delete {self} because {related_object} is related with PROTECT",
+                        protected_objects=protected_objects
                     )
 
             case models.SET_DEFAULT:
