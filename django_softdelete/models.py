@@ -225,58 +225,56 @@ class SoftDeleteModel(models.Model):
         else:
             return
 
-        match on_delete:
+        if on_delete == models.CASCADE:
+            if strict:
+                kwargs['strict'] = strict
+            related_object.delete(*args, **kwargs)
 
-            case models.CASCADE:
-                if strict:
-                    kwargs['strict'] = strict
-                related_object.delete(*args, **kwargs)
+        elif on_delete == models.SET_NULL:
+            setattr(related_object, field.remote_field.name, None)
+            related_object.save()
 
-            case models.SET_NULL:
-                setattr(related_object, field.remote_field.name, None)
+        elif on_delete == models.PROTECT:
+            related_query_name = (field.remote_field.related_query_name or
+                                    field.remote_field.related_name or
+                                    field.opts.model_name)
+
+            if callable(related_query_name):
+                related_query_name = related_query_name()
+
+            if related_object:
+                related_manager_name = related_query_name if hasattr(self,
+                                                                        related_query_name) else f"{related_query_name}_set"
+                protected_objects = list(getattr(self, related_manager_name).all())
+                raise ProtectedError(
+                    f"Cannot delete {self} because {related_object} is related with PROTECT",
+                    protected_objects=protected_objects
+                )
+
+        elif on_delete == models.SET_DEFAULT:
+            default_value = field.get_default()
+            setattr(related_object, field.remote_field.name, default_value)
+            related_object.save()
+
+        elif on_delete == models.SET:
+            if callable(field.remote_field.on_delete_set_function):
+                value = field.remote_field.on_delete_set_function(self)
+                setattr(related_object, field.remote_field.name, value)
                 related_object.save()
 
-            case models.PROTECT:
-                related_query_name = (field.remote_field.related_query_name or
-                                      field.remote_field.related_name or
-                                      field.opts.model_name)
+        elif on_delete == models.DO_NOTHING:
+            pass  # Explicitly do nothing
 
-                if callable(related_query_name):
-                    related_query_name = related_query_name()
+        elif on_delete == models.RESTRICT:
+            if related_object:
+                raise ProtectedError(
+                    f"Cannot delete {self} because {related_object} "
+                    f"is related with RESTRICT",
+                    [related_object]
+                )
 
-                if related_object:
-                    related_manager_name = related_query_name if hasattr(self,
-                                                                         related_query_name) else f"{related_query_name}_set"
-                    protected_objects = list(getattr(self, related_manager_name).all())
-                    raise ProtectedError(
-                        f"Cannot delete {self} because {related_object} is related with PROTECT",
-                        protected_objects=protected_objects
-                    )
-
-            case models.SET_DEFAULT:
-                default_value = field.get_default()
-                setattr(related_object, field.remote_field.name, default_value)
-                related_object.save()
-
-            case models.SET:
-                if callable(field.remote_field.on_delete_set_function):
-                    value = field.remote_field.on_delete_set_function(self)
-                    setattr(related_object, field.remote_field.name, value)
-                    related_object.save()
-
-            case models.DO_NOTHING:
-                pass  # Explicitly do nothing
-
-            case models.RESTRICT:
-                if related_object:
-                    raise ProtectedError(
-                        f"Cannot delete {self} because {related_object} "
-                        f"is related with RESTRICT",
-                        [related_object]
-                    )
-
-            case _:  # M2M
-                related_object.delete(strict=strict, *args, **kwargs)
+        else:  # M2M
+            related_object.delete(strict=strict, *args, **kwargs)
 
         try:
             if related_object.pk is not None:
