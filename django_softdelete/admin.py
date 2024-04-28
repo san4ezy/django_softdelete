@@ -2,6 +2,19 @@ from django.contrib import admin
 
 from django_softdelete.filters import SoftDeleteFilter
 
+@admin.action(description="Hard delete selected items")
+def hard_delete_selected_items(modeladmin, request, queryset):
+    queryset.hard_delete()
+
+@admin.action(description="Restore selected items")
+def restore_selected_items(modeladmin, request, queryset):
+    queryset.restore()
+
+custom_admin_actions = [
+    hard_delete_selected_items,
+    restore_selected_items,
+]
+
 
 class SoftDeletedModelAdmin(admin.ModelAdmin):
     """
@@ -16,6 +29,11 @@ class SoftDeletedModelAdmin(admin.ModelAdmin):
         if ordering:
             qs = qs.order_by(*ordering)
         return qs
+
+    actions = [
+        *admin.ModelAdmin.actions,
+        *custom_admin_actions,
+    ]
 
 
 class GlobalObjectsModelAdmin(admin.ModelAdmin):
@@ -38,3 +56,8 @@ class GlobalObjectsModelAdmin(admin.ModelAdmin):
             list_filter = list(list_filter)
         list_filter.append(SoftDeleteFilter)
         return list_filter
+
+    actions = [
+        *admin.ModelAdmin.actions,
+        *custom_admin_actions,
+    ]
