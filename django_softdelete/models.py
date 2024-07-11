@@ -83,12 +83,11 @@ class SoftDeleteModel(models.Model):
         :param kwargs: Additional keyword arguments.
         :return: None
         """
-        pre_delete.send(sender=self.__class__, instance=self)
+        pre_delete.send(sender=self.__class__, instance=self, using=kwargs.get('using', None))
 
         now = timezone.now()
         with transaction.atomic():
             for field in self._meta.get_fields():
-
                 # Skip generic relations
                 if isinstance(field, GenericRelation):
                     continue
@@ -104,33 +103,19 @@ class SoftDeleteModel(models.Model):
                     )
 
                 if field.one_to_one:
-                    self.__delete_related_one_to_one(
-                        field, strict, *args, **kwargs
-                    )
-
-                # elif field.many_to_many:
-                #     # M2M must not be deleted
-                #     try:
-                #         self.__delete_related_many_to_many(
-                #             field, strict, *args, **kwargs
-                #         )
-                #     except ValueError as e:
-                #         continue
+                    self.__delete_related_one_to_one(field, strict, *args, **kwargs)
 
                 elif field.one_to_many:
                     self.__delete_related_one_to_many(field, strict, *args, **kwargs)
-
                 else:
                     continue
 
             self.deleted_at = now
             self.restored_at = None
-            self.save(
-                update_fields=['deleted_at', 'restored_at', ]
-            )
+            self.save(update_fields=['deleted_at', 'restored_at'])
 
-            post_soft_delete.send(sender=self.__class__, instance=self)
-            post_delete.send(sender=self.__class__, instance=self)
+            post_soft_delete.send(sender=self.__class__, instance=self, using=kwargs.get('using', None))
+            post_delete.send(sender=self.__class__, instance=self, using=kwargs.get('using', None))
 
     def restore(self, strict: bool = True, *args, **kwargs):
         """Restores a deleted object by setting the deleted_at field to None.
