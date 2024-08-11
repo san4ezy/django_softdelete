@@ -243,8 +243,10 @@ class SoftDeleteModel(models.Model):
         if on_delete == models.CASCADE:
             if strict:
                 kwargs['strict'] = strict
-            related_object.delete(transaction_id=transaction_id, *args, **kwargs)
-
+            if isinstance(related_object, SoftDeleteModel):
+                related_object.delete(transaction_id=transaction_id, *args, **kwargs)
+            else:
+                related_object.delete(*args, **kwargs)
         elif on_delete == models.SET_NULL:
             setattr(related_object, field.remote_field.name, None)
             related_object.save()

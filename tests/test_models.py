@@ -285,6 +285,39 @@ class TestSoftDeleteModel:
         assert option.is_restored
         # assert product_image.is_restored  # TODO: fix this
 
+    def test_restore_cascade_only_within_transaction(self, product_factory, shop):
+        """
+        The test is responsible for testing the cascade
+        restoring functionality of a related object.
+        """
+        bread = product_factory(name="Bread")
+        bread.shop = shop
+        bread.save()
+        chips = product_factory(name="Chips")
+        chips.shop = shop
+        chips.save()
+        chips.delete() # Deleted before shop, in another transaction
+        shop.delete()
+
+        # Test restore
+        shop.restore()
+
+        chips.refresh_from_db()
+        bread.refresh_from_db()
+        shop.refresh_from_db()
+        assert self.assert_object_in(chips, False, True, True)
+        assert self.assert_object_in(bread, True, False, True)
+        assert self.assert_object_in(shop, True, False, True)
+        assert chips.is_deleted
+        assert not bread.is_deleted
+        assert not shop.is_deleted
+        assert not chips.is_restored
+        assert bread.is_restored
+        assert shop.is_restored
+        assert chips.transaction_id is not None
+        assert bread.transaction_id is None
+        assert shop.transaction_id is None
+
     def test_hard_delete_cascade(self, option):
         """
         Test the hard delete cascade functionality.
