@@ -348,9 +348,20 @@ class SoftDeleteModel(models.Model):
             if callable(related_query_name):
                 related_query_name = related_query_name()
             if hasattr(remote_model, related_query_name):
-                self.__delete_related_object(
-                    field, related_object, strict, transaction_id, *args, **kwargs
-                )
+                if kwargs.get('o2o_model') != transaction_id:
+                    kwargs['o2o_remote'] = transaction_id
+                    self.__delete_related_object(
+                        field, related_object, strict, transaction_id, *args, **kwargs
+                    )
+            elif hasattr(self, related_query_name):
+                if kwargs.get('o2o_remote') != transaction_id:
+                    kwargs['o2o_model'] = transaction_id
+                    self.__delete_related_object(
+                        field, related_object, strict, transaction_id, *args, **kwargs
+                    )
+
+    def tmp_delete(self, *args, **kwargs):
+        return self.__delete_related_object(*args, **kwargs)
 
     def __delete_related_one_to_many(self, field, strict, *args, **kwargs):
         """

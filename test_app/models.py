@@ -20,10 +20,6 @@ class ProductLanding(SoftDeleteModel):
     text = models.TextField()
 
 
-# class Adv(SoftDeleteModel):
-#     text = models.TextField()
-
-
 class ProductAbstract(SoftDeleteModel):
     product_number = models.CharField(max_length=8)
     name = models.CharField(max_length=32)
@@ -35,7 +31,6 @@ class ProductAbstract(SoftDeleteModel):
     images = models.ManyToManyField(ProductImage)
 
     landing = models.OneToOneField(ProductLanding, on_delete=models.CASCADE, null=True)
-    # adv = models.OneToOneField(Adv, on_delete=models.CASCADE, null=True, related_name="adv_rel")
 
     class Meta:
         abstract = True

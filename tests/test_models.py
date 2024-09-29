@@ -108,22 +108,27 @@ class TestSoftDeleteModel:
         assert product.is_deleted
         assert self.assert_objects_count(Product, 0, 1, 1)
 
-    # def test_soft_deleted_objects_keep_relations(
-    #         self, product_factory, option, product_landing, product,
-    # ):
-    #     # product = product_factory(option=option, landing=product_landing)
-    #     shop = product.shop
-    #     print(shop.product_set.all())
-    #     product.delete()
-    #
-    #     # assert Option.deleted_objects.filter(product__pk=product.pk).exists()
-    #     # assert ProductLanding.deleted_objects.filter(product__pk=product.pk).exists()
-    #     # assert Shop.deleted_objects.filter(pk=product.shop.pk).exists()
-    #     # shop.refresh_from_db()
-    #     print(product.pk)
-    #     print(shop.product_set.all())
-    #     print(shop.product_set.filter(pk=product.pk))
-    #     assert shop.product_set.filter(pk=product.pk).exists()
+    def test_soft_delete_o2o_object(self, product, product_landing):
+        product.landing = product_landing
+        product.save()
+        product_landing.delete()
+        product.refresh_from_db()
+        product_landing.refresh_from_db()
+        assert product.is_deleted
+        assert product_landing.is_deleted
+        assert product_landing.product.id == product.id
+        assert product.landing.id == product_landing.id
+
+    def test_soft_delete_o2o_related_object(self, product, product_landing):
+        product.landing = product_landing
+        product.save()
+        product.delete()
+        product.refresh_from_db()
+        product_landing.refresh_from_db()
+        assert product.is_deleted
+        assert product_landing.is_deleted
+        assert product_landing.product.id == product.id
+        assert product.landing.id == product_landing.id
 
     def test_hard_delete(self, product):
         """
