@@ -92,7 +92,9 @@ class SoftDeleteModel(models.Model):
         :param kwargs: Additional keyword arguments.
         :return: None
         """
-        pre_delete.send(sender=self.__class__, instance=self)
+        pre_delete.send(
+            sender=self.__class__, instance=self, using=kwargs.get('using', None)
+        )
 
         now = timezone.now()
         transaction_id = uuid.uuid4() if not transaction_id else transaction_id
@@ -118,15 +120,6 @@ class SoftDeleteModel(models.Model):
                         field, strict, transaction_id, *args, **kwargs
                     )
 
-                # elif field.many_to_many:
-                #     # M2M must not be deleted
-                #     try:
-                #         self.__delete_related_many_to_many(
-                #             field, strict, *args, **kwargs
-                #         )
-                #     except ValueError as e:
-                #         continue
-
                 elif field.one_to_many:
                     self.__delete_related_one_to_many(field, strict, transaction_id, *args, **kwargs)
 
@@ -140,8 +133,12 @@ class SoftDeleteModel(models.Model):
                 update_fields=['deleted_at', 'restored_at', 'transaction_id', ]
             )
 
-            post_soft_delete.send(sender=self.__class__, instance=self)
-            post_delete.send(sender=self.__class__, instance=self)
+            post_soft_delete.send(
+                sender=self.__class__, instance=self, using=kwargs.get('using', None)
+            )
+            post_delete.send(
+                sender=self.__class__, instance=self, using=kwargs.get('using', None)
+            )
 
     def restore(self, strict: bool = True, transaction_id: str = None, *args, **kwargs):
         """Restores a deleted object by setting the deleted_at field to None.
