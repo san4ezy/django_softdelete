@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="django-soft-delete",
-    version="1.0.14",
+    version="1.0.15",
     author="Alexander Yudkin",
     author_email="san4ezy@gmail.com",
     description="Soft delete models, managers, queryset for Django",
