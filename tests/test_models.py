@@ -421,3 +421,32 @@ class TestSoftDeleteModel:
         assert option.is_deleted
         assert not another_product.is_deleted
         assert not another_option.is_deleted
+
+    def test_soft_delete_m2m(self, product, product_image_factory):
+        image1 = product_image_factory()
+        image2 = product_image_factory()
+        product.images.add(image1, image2)
+        assert image1 in product.images.all()
+        assert image2 in product.images.all()
+
+        product.delete()
+        assert product.is_deleted
+        assert not image1.is_deleted
+        assert not image2.is_deleted
+        # images are still related to the softly deleted product
+        assert image1 in product.images.all()
+        assert image2 in product.images.all()
+
+    # def test_soft_delete_through_model_with_m2m_relation(
+    #         self, shop, employee,
+    # ):
+    #     shop.sellers.create(employee=employee)
+    #     assert shop.sellers.filter(employee=employee).exists()
+    #     assert employee in shop.employees.all()
+    #
+    #     shop.sellers.filter(employee=employee).delete()
+    #     print(shop.employees.all())
+    #     print(shop.sellers.all())
+    #     print(ShopEmployee.global_objects.all())
+    #     assert not shop.sellers.filter(employee=employee).exists()
+    #     assert employee not in shop.employees.all()

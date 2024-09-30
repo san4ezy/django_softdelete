@@ -120,6 +120,14 @@ class SoftDeleteModel(models.Model):
                         field, strict, transaction_id, *args, **kwargs
                     )
 
+                # elif field.many_to_many:
+                #     # M2M forward must not be deleted
+                #     print("M2M forward", field.name)
+                #
+                # elif field.many_to_one:
+                #     # Maybe M2M reverse
+                #     print("M2M reverse", field.name, field.remote_field)  # field.remote_field?
+
                 elif field.one_to_many:
                     self.__delete_related_one_to_many(field, strict, transaction_id, *args, **kwargs)
 
@@ -356,9 +364,6 @@ class SoftDeleteModel(models.Model):
                     self.__delete_related_object(
                         field, related_object, strict, transaction_id, *args, **kwargs
                     )
-
-    def tmp_delete(self, *args, **kwargs):
-        return self.__delete_related_object(*args, **kwargs)
 
     def __delete_related_one_to_many(self, field, strict, *args, **kwargs):
         """
