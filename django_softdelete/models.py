@@ -267,7 +267,11 @@ class SoftDeleteModel(models.Model):
             if related_object:
                 related_manager_name = related_query_name if hasattr(self,
                                                                         related_query_name) else f"{related_query_name}_set"
-                protected_objects = list(getattr(self, related_manager_name).all())
+                if isinstance(field, OneToOneRel):
+                    protected_objects = self, related_manager_name
+                else:
+                    protected_objects = list(getattr(self, related_manager_name).all())
+
                 raise ProtectedError(
                     f"Cannot delete {self} because {related_object} is related with PROTECT",
                     protected_objects=protected_objects
