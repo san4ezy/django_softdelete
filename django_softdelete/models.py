@@ -13,6 +13,18 @@ from django_softdelete.signals import post_hard_delete, post_soft_delete, post_r
 import uuid
 
 
+# see https://docs.djangoproject.com/en/5.1/releases/5.0/#migrating-existing-uuidfield-on-mariadb-10-7
+class Char32UUIDField(models.UUIDField):
+    def db_type(self, connection):
+        return "char(32)"
+
+    def get_db_prep_value(self, value, connection, prepared=False):
+        value = super().get_db_prep_value(value, connection, prepared)
+        if value is not None and not isinstance(value, str):  # pragma: no cover
+            value = value.hex
+        return value
+
+
 class SoftDeleteModel(models.Model):
     """
     A Django model which has been enhanced with soft deletion characteristics.
@@ -22,7 +34,7 @@ class SoftDeleteModel(models.Model):
             If this field is not None, it means the instance has been soft-deleted.
         restored_at (models.DateTimeField): Date and time when an instance was
             restored.
-        transaction_id (models.UUIDField): UUID field that is used to label all
+        transaction_id (Char32UUIDField): A (backwards-compatible) UUID field that is used to label all
             entites that were soft-deleted inside same transaction. Later it is
             used to restore objects. This will prevent situations where related
             objects that were deleted before soft-deletion, are restored.
@@ -41,7 +53,7 @@ class SoftDeleteModel(models.Model):
     """
     deleted_at = models.DateTimeField(blank=True, null=True)
     restored_at = models.DateTimeField(blank=True, null=True)
-    transaction_id = models.UUIDField(blank=True, null=True)
+    transaction_id = Char32UUIDField(blank=True, null=True)
 
     objects = SoftDeleteManager()
     deleted_objects = DeletedManager()
