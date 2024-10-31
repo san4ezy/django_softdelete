@@ -107,4 +107,9 @@ class YourOwnQuerySet(SoftDeleteQuerySet):
     pass
 ```
 
+## Support me with a cup of coffee
+
+USDT (ERC20): `0x308dad9B7014AdeD217e817B6274EeeD971200F9`
+
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2H015I0T4)
+
