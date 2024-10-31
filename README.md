@@ -106,3 +106,5 @@ from django_softdelete.models import SoftDeleteQuerySet
 class YourOwnQuerySet(SoftDeleteQuerySet):
     pass
 ```
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2H015I0T4)
