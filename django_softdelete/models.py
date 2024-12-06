@@ -81,19 +81,27 @@ class SoftDeleteModel(models.Model):
         super().delete(*args, **kwargs)
         post_hard_delete.send(sender=self.__class__, instance=self)
 
-    def delete(self, strict: bool = False, transaction_id: str = None, *args, **kwargs):
+    def delete(
+            self,
+            strict: bool = False,
+            transaction_id: str = None,
+            using=None,
+            *args, **kwargs,
+    ):
         """
         Delete the object and all related objects.
 
         :param strict: Whether to enforce strict deletion by checking if related models
                        are subclasses of SoftDeleteModel.
         :param transaction_id: A UUID used to identify all objects that were deleted inside same transaction
+        :param using: (str, optional) The database alias to use for the deletion.
+                      If not specified, the default database connection will be used.
         :param args: Additional positional arguments.
         :param kwargs: Additional keyword arguments.
         :return: None
         """
         pre_delete.send(
-            sender=self.__class__, instance=self, using=kwargs.get('using', None)
+            sender=self.__class__, instance=self, using=using,
         )
 
         now = timezone.now()
@@ -142,10 +150,10 @@ class SoftDeleteModel(models.Model):
             )
 
             post_soft_delete.send(
-                sender=self.__class__, instance=self, using=kwargs.get('using', None)
+                sender=self.__class__, instance=self, using=using,
             )
             post_delete.send(
-                sender=self.__class__, instance=self, using=kwargs.get('using', None)
+                sender=self.__class__, instance=self, using=using,
             )
 
     def restore(self, strict: bool = True, transaction_id: str = None, *args, **kwargs):
