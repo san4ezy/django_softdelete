@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling >= 1.24.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "django-soft-delete"
+dynamic = ["version"]
+description = "Soft delete models, managers, queryset for Django"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.6"
+authors = [
+    { name = "Alexander Yudkin", email = "san4ezy@gmail.com" },
+]
+classifiers = [
+    "Environment :: Web Environment",
+    "Framework :: Django",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = ["Django"]
+
+[project.urls]
+Homepage = "https://github.com/san4ezy/django_softdelete"
+
+[tool.hatch.version]
+path = "django_softdelete/__about__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/django_softdelete",
+    "/tests"
+]
+
+[tool.hatch.build.targets.wheel]
+include = [
+    "/django_softdelete",
+]
+
+[tool.hatch.envs.hatch-test]
+# https://hatch.pypa.io/latest/config/internal/testing/
+randomize = true
+extra-dependencies = [
+    "Django==5.0.1",
+    "pytest-django ~= 4.8.0",
+    "pytest-cov ~= 5.0"
+]
+extra-args = ["--nomigrations", "--pythonwarnings=all", "--cov", "--cov-report=json", "--cov-report=term"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "test_project.settings"

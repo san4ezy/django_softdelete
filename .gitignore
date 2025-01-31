@@ -6,3 +6,7 @@ rest-api.http
 *.pyc
 Makefile
 .venv/
+dist/
+.pytest_cache/
+.coverage
+coverage.json
