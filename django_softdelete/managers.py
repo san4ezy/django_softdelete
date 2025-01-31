@@ -44,6 +44,12 @@ class DeletedQuerySet(models.query.QuerySet):
             obj.restore(strict=strict)
         return
 
+    def hard_delete(self):
+        """
+        Hard delete the objects permanently.
+        """
+        return super().delete()
+
 
 class SoftDeleteManager(models.Manager):
     """
