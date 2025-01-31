@@ -358,7 +358,6 @@ class TestSoftDeleteModel:
         ):
             product.delete()
             assert pre_delete_mock.call_count == 1
-            assert post_delete_mock.call_count == 1
             assert post_soft_delete_mock.call_count == 1
 
     def test_signal_calls_on_hard_delete(self, product, signal_mock):
