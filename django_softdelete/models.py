@@ -152,9 +152,6 @@ class SoftDeleteModel(models.Model):
             post_soft_delete.send(
                 sender=self.__class__, instance=self, using=using,
             )
-            post_delete.send(
-                sender=self.__class__, instance=self, using=using,
-            )
 
     def restore(self, strict: bool = True, transaction_id: str = None, *args, **kwargs):
         """Restores a deleted object by setting the deleted_at field to None.
