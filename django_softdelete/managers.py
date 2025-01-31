@@ -1,13 +1,6 @@
 from django.db import models
 
 
-# def get_settings():
-#     default_settings = dict(
-#         cascade=True,
-#     )
-#     return getattr(settings, 'DJANGO_SOFTDELETE_SETTINGS', default_settings)
-
-
 class SoftDeleteQuerySet(models.query.QuerySet):
     """
     A custom QuerySet class for soft deletion of objects.
@@ -17,21 +10,17 @@ class SoftDeleteQuerySet(models.query.QuerySet):
     - hard_delete(): Hard deletes all objects in the QuerySet.
 
     """
-    def delete(self):
+    def delete(self, strict: bool = False):
         """
-        Delete all objects stored in the class.
-
-        :return: None
+        Override delete method to perform soft deletion on the queryset.
         """
         for obj in self.all():
-            obj.delete()
+            obj.delete(strict=strict)
         return
 
     def hard_delete(self):
-        """Hard delete the object.
-
-        :return: None
-
+        """
+        Hard delete the objects permanently.
         """
         return super().delete()
 
@@ -42,7 +31,7 @@ class DeletedQuerySet(models.query.QuerySet):
 
     restore(*args, **kwargs) - Restore deleted objects based on the given filter arguments.
     """
-    def restore(self, *args, **kwargs):
+    def restore(self, strict: bool = True, *args, **kwargs):
         """
         Restore items from the trash.
 
@@ -52,8 +41,14 @@ class DeletedQuerySet(models.query.QuerySet):
         """
         qs = self.filter(*args, **kwargs)
         for obj in qs:
-            obj.restore()
+            obj.restore(strict=strict)
         return
+
+    def hard_delete(self):
+        """
+        Hard delete the objects permanently.
+        """
+        return super().delete()
 
 
 class SoftDeleteManager(models.Manager):

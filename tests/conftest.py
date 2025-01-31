@@ -54,6 +54,11 @@ def another_product(name, shop, category, price):
 
 
 @pytest.fixture
+def employee(name):
+    return Employee.objects.create(name=name)
+
+
+@pytest.fixture
 def product_restricted_category(name, shop, category, price):
     return ProductRestrictedCategory.objects.create(
         name=name,
@@ -139,6 +144,15 @@ def option_factory():
             name = ''.join(random.choices(string.ascii_uppercase, k=10))
         return Option.objects.create(name=name)
     return create_option
+
+
+@pytest.fixture
+def product_image_factory():
+    def create_product_image(name=None):
+        if name is None:
+            name = ''.join(random.choices(string.ascii_uppercase, k=10))
+        return ProductImage.objects.create(name=name)
+    return create_product_image
 
 
 @pytest.fixture

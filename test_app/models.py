@@ -3,9 +3,26 @@ from django.db import models
 from django_softdelete.models import SoftDeleteModel
 
 
+class Employee(SoftDeleteModel):
+    name = models.CharField(max_length=32)
+
+
 class Shop(SoftDeleteModel):
     name = models.CharField(max_length=32)
     is_active = models.BooleanField(default=True)
+    employees = models.ManyToManyField(
+        Employee,
+        through='ShopEmployee',
+    )
+
+
+class ShopEmployee(SoftDeleteModel):
+    shop = models.ForeignKey(
+        Shop, on_delete=models.CASCADE, related_name='sellers',
+    )
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name='shops',
+    )
 
 
 class Category(SoftDeleteModel):
@@ -20,10 +37,6 @@ class ProductLanding(SoftDeleteModel):
     text = models.TextField()
 
 
-# class Adv(SoftDeleteModel):
-#     text = models.TextField()
-
-
 class ProductAbstract(SoftDeleteModel):
     product_number = models.CharField(max_length=8)
     name = models.CharField(max_length=32)
@@ -35,7 +48,6 @@ class ProductAbstract(SoftDeleteModel):
     images = models.ManyToManyField(ProductImage)
 
     landing = models.OneToOneField(ProductLanding, on_delete=models.CASCADE, null=True)
-    # adv = models.OneToOneField(Adv, on_delete=models.CASCADE, null=True, related_name="adv_rel")
 
     class Meta:
         abstract = True

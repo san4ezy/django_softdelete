@@ -10,6 +10,7 @@ from django_softdelete.managers import DeletedManager
 from django_softdelete.managers import GlobalManager
 from django_softdelete.managers import SoftDeleteManager
 from django_softdelete.signals import post_hard_delete, post_soft_delete, post_restore
+import uuid
 
 
 class SoftDeleteModel(models.Model):
@@ -19,6 +20,12 @@ class SoftDeleteModel(models.Model):
     Attributes:
         deleted_at (models.DateTimeField): Date and time when an instance was soft-deleted.
             If this field is not None, it means the instance has been soft-deleted.
+        restored_at (models.DateTimeField): Date and time when an instance was
+            restored.
+        transaction_id (models.UUIDField): UUID field that is used to label all
+            entites that were soft-deleted inside same transaction. Later it is
+            used to restore objects. This will prevent situations where related
+            objects that were deleted before soft-deletion, are restored.
         objects (SoftDeleteManager): a custom manager that excludes soft deleted objects.
         deleted_objects (DeletedManager): a custom manager that handles only soft deleted objects.
         global_objects (GlobalManager): a custom manager that handles all objects regardless of deletion status.
@@ -34,6 +41,7 @@ class SoftDeleteModel(models.Model):
     """
     deleted_at = models.DateTimeField(blank=True, null=True)
     restored_at = models.DateTimeField(blank=True, null=True)
+    transaction_id = models.UUIDField(blank=True, null=True)
 
     objects = SoftDeleteManager()
     deleted_objects = DeletedManager()
@@ -73,19 +81,31 @@ class SoftDeleteModel(models.Model):
         super().delete(*args, **kwargs)
         post_hard_delete.send(sender=self.__class__, instance=self)
 
-    def delete(self, strict: bool = False, *args, **kwargs):
+    def delete(
+            self,
+            strict: bool = False,
+            transaction_id: str = None,
+            using=None,
+            *args, **kwargs,
+    ):
         """
         Delete the object and all related objects.
 
         :param strict: Whether to enforce strict deletion by checking if related models
                        are subclasses of SoftDeleteModel.
+        :param transaction_id: A UUID used to identify all objects that were deleted inside same transaction
+        :param using: (str, optional) The database alias to use for the deletion.
+                      If not specified, the default database connection will be used.
         :param args: Additional positional arguments.
         :param kwargs: Additional keyword arguments.
         :return: None
         """
-        pre_delete.send(sender=self.__class__, instance=self)
+        pre_delete.send(
+            sender=self.__class__, instance=self, using=using,
+        )
 
         now = timezone.now()
+        transaction_id = uuid.uuid4() if not transaction_id else transaction_id
         with transaction.atomic():
             for field in self._meta.get_fields():
 
@@ -105,39 +125,41 @@ class SoftDeleteModel(models.Model):
 
                 if field.one_to_one:
                     self.__delete_related_one_to_one(
-                        field, strict, *args, **kwargs
+                        field, strict, transaction_id, *args, **kwargs
                     )
 
                 # elif field.many_to_many:
-                #     # M2M must not be deleted
-                #     try:
-                #         self.__delete_related_many_to_many(
-                #             field, strict, *args, **kwargs
-                #         )
-                #     except ValueError as e:
-                #         continue
+                #     # M2M forward must not be deleted
+                #     print("M2M forward", field.name)
+                #
+                # elif field.many_to_one:
+                #     # Maybe M2M reverse
+                #     print("M2M reverse", field.name, field.remote_field)  # field.remote_field?
 
                 elif field.one_to_many:
-                    self.__delete_related_one_to_many(field, strict, *args, **kwargs)
+                    self.__delete_related_one_to_many(field, strict, transaction_id, *args, **kwargs)
 
                 else:
                     continue
 
             self.deleted_at = now
             self.restored_at = None
+            self.transaction_id = transaction_id
             self.save(
-                update_fields=['deleted_at', 'restored_at', ]
+                update_fields=['deleted_at', 'restored_at', 'transaction_id', ]
             )
 
-            post_soft_delete.send(sender=self.__class__, instance=self)
-            post_delete.send(sender=self.__class__, instance=self)
+            post_soft_delete.send(
+                sender=self.__class__, instance=self, using=using,
+            )
 
-    def restore(self, strict: bool = True, *args, **kwargs):
+    def restore(self, strict: bool = True, transaction_id: str = None, *args, **kwargs):
         """Restores a deleted object by setting the deleted_at field to None.
 
         :param strict: A boolean indicating whether to perform strict restoration.
             If True, the related objects must be subclasses of SoftDeleteModel.
             If False, the related objects are restored regardless.
+        :param transaction_id: A UUID used to identify all objects that were deleted inside same transaction
         :param args: Additional positional arguments.
         :param kwargs: Additional keyword arguments.
         :return: None
@@ -146,6 +168,7 @@ class SoftDeleteModel(models.Model):
         now = timezone.now()
         self.deleted_at = None
         self.restored_at = now
+        transaction_id = self.transaction_id if not transaction_id else transaction_id
         with transaction.atomic():
             for field in self._meta.get_fields():
 
@@ -163,7 +186,7 @@ class SoftDeleteModel(models.Model):
                     )
 
                 if field.one_to_one:
-                    self.__restore_related_one_to_one(field, strict, *args, **kwargs)
+                    self.__restore_related_one_to_one(field, strict, transaction_id, *args, **kwargs)
 
                 # elif field.many_to_many:
                 #     # M2M must not be restored
@@ -172,25 +195,27 @@ class SoftDeleteModel(models.Model):
                 elif field.one_to_many:
                     try:
                         self.__restore_related_one_to_many(
-                            field, strict, *args, **kwargs
+                            field, strict, transaction_id, *args, **kwargs
                         )
                     except ValueError as e:
                         continue
 
                 else:
                     continue
+            self.transaction_id = None
             self.save(
-                update_fields=['deleted_at', 'restored_at', ]
+                update_fields=['deleted_at', 'restored_at', 'transaction_id', ]
             )
             post_restore.send(sender=self.__class__, instance=self)
 
     # PRIVATE SECTION
 
-    def __delete_related_object(self, field, related_object, strict, *args, **kwargs):
+    def __delete_related_object(self, field, related_object, strict, transaction_id, *args, **kwargs):
         """
         :param field: The field that defines the relationship between the current object and the related object.
         :param related_object: The related object that needs to be deleted.
         :param strict: A boolean value indicating whether to perform strict deletion or not.
+        :param transaction_id: A UUID used to identify all objects that were deleted inside same transaction
         :param args: Additional positional arguments to be passed to the delete method of the related object.
         :param kwargs: Additional keyword arguments to be passed to the delete method of the related object.
         :return: None
@@ -228,8 +253,10 @@ class SoftDeleteModel(models.Model):
         if on_delete == models.CASCADE:
             if strict:
                 kwargs['strict'] = strict
-            related_object.delete(*args, **kwargs)
-
+            if isinstance(related_object, SoftDeleteModel):
+                related_object.delete(transaction_id=transaction_id, *args, **kwargs)
+            else:
+                related_object.delete(*args, **kwargs)
         elif on_delete == models.SET_NULL:
             setattr(related_object, field.remote_field.name, None)
             related_object.save()
@@ -245,7 +272,11 @@ class SoftDeleteModel(models.Model):
             if related_object:
                 related_manager_name = related_query_name if hasattr(self,
                                                                         related_query_name) else f"{related_query_name}_set"
-                protected_objects = list(getattr(self, related_manager_name).all())
+                if isinstance(field, OneToOneRel):
+                    protected_objects = self, related_manager_name
+                else:
+                    protected_objects = list(getattr(self, related_manager_name).all())
+
                 raise ProtectedError(
                     f"Cannot delete {self} because {related_object} is related with PROTECT",
                     protected_objects=protected_objects
@@ -282,7 +313,7 @@ class SoftDeleteModel(models.Model):
         except AttributeError:
             pass
 
-    def __restore_related_object(self, field, related_object, strict, *args, **kwargs):
+    def __restore_related_object(self, field, related_object, strict, transaction_id, *args, **kwargs):
         """
         Restores a related object and saves it if it has a valid primary key.
 
@@ -292,6 +323,8 @@ class SoftDeleteModel(models.Model):
         :type related_object: Any
         :param strict: Flag to determine if restore should be strict or not.
         :type strict: bool
+        :param transaction_id: A UUID used to identify all objects that were deleted inside same transaction
+        :type transaction_id: str
         :param args: Additional positional arguments for the related object's restore method.
         :type args: Any
         :param kwargs: Additional keyword arguments for the related object's restore method.
@@ -300,19 +333,20 @@ class SoftDeleteModel(models.Model):
         :rtype: None
         """
         if related_object.is_deleted:
-            related_object.restore(strict=strict, *args, **kwargs)
+            related_object.restore(strict=strict, transaction_id=transaction_id, *args, **kwargs)
             try:
                 if related_object.pk is not None:
                     related_object.save()
             except AttributeError:
                 pass
 
-    def __delete_related_one_to_one(self, field, strict, *args, **kwargs):
+    def __delete_related_one_to_one(self, field, strict, transaction_id, *args, **kwargs):
         """
         Delete related one-to-one object.
 
         :param field: The field representing the one-to-one relationship.
         :param strict: If True, raise an exception if the related object does not exist. If False, do nothing if the related object does not exist.
+        :param transaction_id: A UUID used to identify all objects that were deleted inside same transaction
         :param args: Additional positional arguments passed to __delete_related_object method.
         :param kwargs: Additional keyword arguments passed to __delete_related_object method.
         :return: None
@@ -328,9 +362,17 @@ class SoftDeleteModel(models.Model):
             if callable(related_query_name):
                 related_query_name = related_query_name()
             if hasattr(remote_model, related_query_name):
-                self.__delete_related_object(
-                    field, related_object, strict, *args, **kwargs
-                )
+                if kwargs.get('o2o_model') != transaction_id:
+                    kwargs['o2o_remote'] = transaction_id
+                    self.__delete_related_object(
+                        field, related_object, strict, transaction_id, *args, **kwargs
+                    )
+            elif hasattr(self, related_query_name):
+                if kwargs.get('o2o_remote') != transaction_id:
+                    kwargs['o2o_model'] = transaction_id
+                    self.__delete_related_object(
+                        field, related_object, strict, transaction_id, *args, **kwargs
+                    )
 
     def __delete_related_one_to_many(self, field, strict, *args, **kwargs):
         """
@@ -370,26 +412,28 @@ class SoftDeleteModel(models.Model):
     #             field, related_object, strict, *args, **kwargs
     #         )
 
-    def __restore_related_one_to_one(self, field, strict, *args, **kwargs):
+    def __restore_related_one_to_one(self, field, strict, transaction_id, *args, **kwargs):
         """
         :param field: Field object representing the one-to-one relationship.
         :param strict: Flag indicating whether to raise an exception if the related object is not found.
+        :param transaction_id: A UUID used to identify all objects that were deleted inside same transaction
         :param args: Additional positional arguments to be passed to the __restore_related_object method.
         :param kwargs: Additional keyword arguments to be passed to the __restore_related_object method.
         :return: None
         """
         related_object = getattr(self, field.name, None)
-        if related_object:
+        if related_object and related_object.transaction_id == transaction_id:
             self.__restore_related_object(
-                field, related_object, strict, *args, **kwargs
+                field, related_object, strict, transaction_id, *args, **kwargs
             )
 
-    def __restore_related_one_to_many(self, field, strict, *args, **kwargs):
+    def __restore_related_one_to_many(self, field, strict, transaction_id, *args, **kwargs):
         """
         This method is used to restore related objects in a one-to-many relationship.
 
         :param field: A Django field representing the relationship between two models
         :param strict: A flag indicating whether to restore related objects even if they are not marked as deleted
+        :param transaction_id: A UUID used to identify all objects that were deleted inside same transaction
         :param args: Additional positional arguments to be passed to the __restore_related_object method
         :param kwargs: Additional keyword arguments to be passed to the __restore_related_object method
         :return: None
@@ -400,10 +444,10 @@ class SoftDeleteModel(models.Model):
             raise ValueError('No related objects found')
         # TODO: it would be better to save object manager names in the variables
         for related_object in remote_model.deleted_objects.filter(
-                **{remote_field.name: self}
+            **{remote_field.name: self, "transaction_id": transaction_id}
         ):
             self.__restore_related_object(
-                field, related_object, strict, *args, **kwargs
+                field, related_object, strict, transaction_id, *args, **kwargs
             )
 
     # def __restore_related_many_to_many(self, field, strict, *args, **kwargs):

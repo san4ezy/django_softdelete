@@ -108,22 +108,27 @@ class TestSoftDeleteModel:
         assert product.is_deleted
         assert self.assert_objects_count(Product, 0, 1, 1)
 
-    # def test_soft_deleted_objects_keep_relations(
-    #         self, product_factory, option, product_landing, product,
-    # ):
-    #     # product = product_factory(option=option, landing=product_landing)
-    #     shop = product.shop
-    #     print(shop.product_set.all())
-    #     product.delete()
-    #
-    #     # assert Option.deleted_objects.filter(product__pk=product.pk).exists()
-    #     # assert ProductLanding.deleted_objects.filter(product__pk=product.pk).exists()
-    #     # assert Shop.deleted_objects.filter(pk=product.shop.pk).exists()
-    #     # shop.refresh_from_db()
-    #     print(product.pk)
-    #     print(shop.product_set.all())
-    #     print(shop.product_set.filter(pk=product.pk))
-    #     assert shop.product_set.filter(pk=product.pk).exists()
+    def test_soft_delete_o2o_object(self, product, product_landing):
+        product.landing = product_landing
+        product.save()
+        product_landing.delete()
+        product.refresh_from_db()
+        product_landing.refresh_from_db()
+        assert product.is_deleted
+        assert product_landing.is_deleted
+        assert product_landing.product.id == product.id
+        assert product.landing.id == product_landing.id
+
+    def test_soft_delete_o2o_related_object(self, product, product_landing):
+        product.landing = product_landing
+        product.save()
+        product.delete()
+        product.refresh_from_db()
+        product_landing.refresh_from_db()
+        assert product.is_deleted
+        assert product_landing.is_deleted
+        assert product_landing.product.id == product.id
+        assert product.landing.id == product_landing.id
 
     def test_hard_delete(self, product):
         """
@@ -285,6 +290,39 @@ class TestSoftDeleteModel:
         assert option.is_restored
         # assert product_image.is_restored  # TODO: fix this
 
+    def test_restore_cascade_only_within_transaction(self, product_factory, shop):
+        """
+        The test is responsible for testing the cascade
+        restoring functionality of a related object.
+        """
+        bread = product_factory(name="Bread")
+        bread.shop = shop
+        bread.save()
+        chips = product_factory(name="Chips")
+        chips.shop = shop
+        chips.save()
+        chips.delete() # Deleted before shop, in another transaction
+        shop.delete()
+
+        # Test restore
+        shop.restore()
+
+        chips.refresh_from_db()
+        bread.refresh_from_db()
+        shop.refresh_from_db()
+        assert self.assert_object_in(chips, False, True, True)
+        assert self.assert_object_in(bread, True, False, True)
+        assert self.assert_object_in(shop, True, False, True)
+        assert chips.is_deleted
+        assert not bread.is_deleted
+        assert not shop.is_deleted
+        assert not chips.is_restored
+        assert bread.is_restored
+        assert shop.is_restored
+        assert chips.transaction_id is not None
+        assert bread.transaction_id is None
+        assert shop.transaction_id is None
+
     def test_hard_delete_cascade(self, option):
         """
         Test the hard delete cascade functionality.
@@ -320,7 +358,6 @@ class TestSoftDeleteModel:
         ):
             product.delete()
             assert pre_delete_mock.call_count == 1
-            assert post_delete_mock.call_count == 1
             assert post_soft_delete_mock.call_count == 1
 
     def test_signal_calls_on_hard_delete(self, product, signal_mock):
@@ -383,3 +420,32 @@ class TestSoftDeleteModel:
         assert option.is_deleted
         assert not another_product.is_deleted
         assert not another_option.is_deleted
+
+    def test_soft_delete_m2m(self, product, product_image_factory):
+        image1 = product_image_factory()
+        image2 = product_image_factory()
+        product.images.add(image1, image2)
+        assert image1 in product.images.all()
+        assert image2 in product.images.all()
+
+        product.delete()
+        assert product.is_deleted
+        assert not image1.is_deleted
+        assert not image2.is_deleted
+        # images are still related to the softly deleted product
+        assert image1 in product.images.all()
+        assert image2 in product.images.all()
+
+    # def test_soft_delete_through_model_with_m2m_relation(
+    #         self, shop, employee,
+    # ):
+    #     shop.sellers.create(employee=employee)
+    #     assert shop.sellers.filter(employee=employee).exists()
+    #     assert employee in shop.employees.all()
+    #
+    #     shop.sellers.filter(employee=employee).delete()
+    #     print(shop.employees.all())
+    #     print(shop.sellers.all())
+    #     print(ShopEmployee.global_objects.all())
+    #     assert not shop.sellers.filter(employee=employee).exists()
+    #     assert employee not in shop.employees.all()
