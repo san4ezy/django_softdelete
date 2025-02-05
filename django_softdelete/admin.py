@@ -4,7 +4,8 @@ from django_softdelete.filters import SoftDeleteFilter
 
 @admin.action(description="Hard delete selected items")
 def hard_delete_selected_items(modeladmin, request, queryset):
-    queryset.hard_delete()
+    for obj in queryset:
+        obj.hard_delete()
 
 @admin.action(description="Restore selected items")
 def restore_selected_items(modeladmin, request, queryset):
