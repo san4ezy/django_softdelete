@@ -1,6 +1,7 @@
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
 from django.db import transaction
+from django.db.models import OneToOneRel
 from django.db.models.deletion import ProtectedError
 from django.db.models.signals import pre_delete, post_delete
 from django.utils import timezone
@@ -251,11 +252,12 @@ class SoftDeleteModel(models.Model):
             return
 
         if on_delete == models.CASCADE:
-            if strict:
-                kwargs['strict'] = strict
             if isinstance(related_object, SoftDeleteModel):
+                if strict:
+                    kwargs['strict'] = strict
                 related_object.delete(transaction_id=transaction_id, *args, **kwargs)
             else:
+                kwargs.pop("o2o_model", None)
                 related_object.delete(*args, **kwargs)
         elif on_delete == models.SET_NULL:
             setattr(related_object, field.remote_field.name, None)

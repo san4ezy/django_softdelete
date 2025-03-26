@@ -85,6 +85,13 @@ def not_soft_related_model(name, product_not_soft_relation):
 
 
 @pytest.fixture
+def not_soft_one2one_model(name, product_not_soft_relation):
+    return NotSoftOneToOneModel.objects.create(
+        product=product_not_soft_relation
+    )
+
+
+@pytest.fixture
 def option(name, product):
     return Option.objects.create(name=name, product=product)
 
