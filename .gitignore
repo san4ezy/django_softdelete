@@ -10,3 +10,11 @@ dist/
 .pytest_cache/
 .coverage
 coverage.json
+
+# Ignore test app migrations
+test_app/migrations/*.py
+!test_app/migrations/__init__.py
+
+# Ignore database files
+db.sqlite3
+*.sqlite3
