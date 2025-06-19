@@ -1,6 +1,7 @@
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
 from django.db import transaction
+from django.db.models import OneToOneRel
 from django.db.models.deletion import ProtectedError
 from django.db.models.signals import pre_delete, post_delete
 from django.utils import timezone

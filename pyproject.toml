@@ -39,11 +39,11 @@ include = [
     "/django_softdelete",
 ]
 
-[tool.hatch.envs.hatch-test]
+[tool.hatch.envs.test]
 # https://hatch.pypa.io/latest/config/internal/testing/
 randomize = true
 extra-dependencies = [
-    "Django==5.0.1",
+    "Django>=4.2",
     "pytest-django ~= 4.8.0",
     "pytest-cov ~= 5.0"
 ]
