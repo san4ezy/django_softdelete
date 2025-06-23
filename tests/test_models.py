@@ -408,6 +408,16 @@ class TestSoftDeleteModel:
             pk=not_soft_related_model.pk
         ).exists()
 
+    def test_delete_with_not_soft_delete_model_one2one_not_strict(
+            self, not_soft_one2one_model, product_not_soft_relation,
+    ):
+        product_not_soft_relation.delete(strict=False)
+        product_not_soft_relation.refresh_from_db()
+        assert product_not_soft_relation.is_deleted
+        assert not NotSoftOneToOneModel.objects.filter(
+            pk=not_soft_one2one_model.pk
+        ).exists()
+
     def test_delete_only_target_instances(
             self, product, another_product, option, another_option,
     ):
