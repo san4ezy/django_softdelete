@@ -1,11 +1,13 @@
 from contextlib import contextmanager
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 import random
 import string
 
+from django.contrib.admin import AdminSite
 from django.db.models.signals import pre_delete
+from django.test import RequestFactory
 
 from test_app.models import *
 
@@ -166,3 +168,26 @@ def signal_mock():
         finally:
             signal.disconnect(m, sender=sender)
     return _mock
+
+
+@pytest.fixture
+def admin_site():
+    """Create a test admin site"""
+    return AdminSite()
+
+
+@pytest.fixture
+def request_factory():
+    """Create a request factory"""
+    return RequestFactory()
+
+
+@pytest.fixture
+def admin_request(request_factory):
+    """Create a mock admin request with user"""
+    request = request_factory.get('/admin/')
+    request.user = Mock()
+    request.user.is_authenticated = True
+    request.user.is_staff = True
+    request.user.is_superuser = True
+    return request

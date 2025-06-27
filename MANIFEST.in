@@ -1,0 +1,4 @@
+include django_softdelete/templates/admin/*.html
+include django_softdelete/static/django_softdelete/css/*.css
+recursive-include django_softdelete/templates *
+recursive-include django_softdelete/static *

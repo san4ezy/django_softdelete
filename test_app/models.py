@@ -7,6 +7,16 @@ class Employee(SoftDeleteModel):
     name = models.CharField(max_length=32)
 
 
+class DeletedEmployeeProxy(Employee):
+    class Meta:
+        proxy = True
+
+
+class GlobalEmployeeProxy(Employee):
+    class Meta:
+        proxy = True
+
+
 class Shop(SoftDeleteModel):
     name = models.CharField(max_length=32)
     is_active = models.BooleanField(default=True)

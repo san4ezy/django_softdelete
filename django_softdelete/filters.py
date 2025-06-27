@@ -8,7 +8,7 @@ class SoftDeleteFilter(SimpleListFilter):
     def lookups(self, request, model_admin):
         return (
             ('true', 'Deleted Softly'),
-            # ('false', 'Not Deleted'),
+            ('false', 'Not Deleted'),
             # ('all', 'All'),
         )
 
@@ -17,8 +17,8 @@ class SoftDeleteFilter(SimpleListFilter):
             'true': False,
             'false': True,
             'all': 'ALL',
-        }[self.value() or 'false']
-        # if value == 'ALL':
-        #     return queryset
+        }[self.value() or 'all']
+        if value == 'ALL':
+            return queryset
 
         return queryset.filter(deleted_at__isnull=value)
