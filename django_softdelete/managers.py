@@ -51,6 +51,43 @@ class DeletedQuerySet(models.query.QuerySet):
         return super().delete()
 
 
+class GlobalQuerySet(models.query.QuerySet):
+    """
+    A custom QuerySet class that provides both soft delete and restore functionality
+    for all objects regardless of their deletion status.
+
+    This QuerySet is used by GlobalManager to ensure consistent behavior
+    across all managers when used in Django Admin or other contexts.
+    """
+    def delete(self, strict: bool = False):
+        """
+        Override delete method to perform soft deletion on the queryset.
+        """
+        for obj in self.all():
+            obj.delete(strict=strict)
+        return
+
+    def restore(self, strict: bool = True, *args, **kwargs):
+        """
+        Restore items from the trash.
+
+        :param strict: Whether to perform strict restoration.
+        :param args: Additional arguments for filtering the items to be restored.
+        :param kwargs: Additional keyword arguments for filtering the items to be restored.
+        :return: None.
+        """
+        qs = self.filter(*args, **kwargs)
+        for obj in qs:
+            obj.restore(strict=strict)
+        return
+
+    def hard_delete(self):
+        """
+        Hard delete the objects permanently.
+        """
+        return super().delete()
+
+
 class SoftDeleteManager(models.Manager):
     """
     Get the queryset of the SoftDeleteManager.
@@ -102,7 +139,19 @@ class DeletedManager(models.Manager):
 
 class GlobalManager(models.Manager):
     """
-    It's a standard Django objects manager, which works with all objects regardless
-    of soft deletion logic.
+    A manager that works with all objects regardless of soft deletion logic.
+
+    This manager returns a GlobalQuerySet that includes both deleted and non-deleted
+    objects and provides both delete (soft) and restore functionality.
+
+    This ensures consistent behavior when used in Django Admin actions or
+    other contexts where the manager might be used directly.
     """
-    pass
+    def get_queryset(self):
+        """
+        Get the queryset for the model that includes all objects.
+
+        :return: A queryset that includes all objects (both deleted and non-deleted).
+        :rtype: GlobalQuerySet
+        """
+        return GlobalQuerySet(self.model, using=self._db)

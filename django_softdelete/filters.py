@@ -18,6 +18,8 @@ class SoftDeleteFilter(SimpleListFilter):
             'false': True,
             'all': 'ALL',
         }[self.value() or 'all']
+        print("FUCKING", value)
+        print(queryset)
         if value == 'ALL':
             return queryset
 

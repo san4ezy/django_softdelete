@@ -150,7 +150,24 @@ class GlobalObjectsModelAdmin(admin.ModelAdmin):
     def get_actions(self, request):
         actions = super().get_actions(request)
         actions.pop(REGULAR_DELETE_ACTION_NAME, None)  # Remove regular delete action
-        actions.update(SOFT_DELETE_ACTION)
-        actions.update(HARD_DELETE_ACTION)
-        actions.update(RESTORE_ACTION)
+
+        # Check current filter state
+        deleted_filter_value = {
+            'true': True,
+            'false': False,
+            'all': 'ALL',
+        }[request.GET.get('is_deleted') or 'all']
+
+        if deleted_filter_value is True:  # Deleted softly
+            actions.update(RESTORE_ACTION)
+            actions.update(HARD_DELETE_ACTION)
+        elif deleted_filter_value is False or deleted_filter_value is None:
+            # Not deleted
+            actions.update(SOFT_DELETE_ACTION)
+        elif deleted_filter_value == 'ALL':
+            # All
+            actions.update(SOFT_DELETE_ACTION)
+            actions.update(RESTORE_ACTION)
+            actions.update(HARD_DELETE_ACTION)
+
         return actions
