@@ -412,6 +412,75 @@ except ProtectedError as e:
 # Error message contains protected foreign key references.
 ```
 
+## Development
+
+This project uses [Hatch](https://hatch.pypa.io/) for environment management, testing, and building. Hatch provides a more comprehensive alternative to traditional requirements.txt files and virtualenv management.
+
+### Installing Hatch
+
+```bash
+pip install hatch
+```
+
+### Creating Development Environments
+
+```bash
+# Create the default development environment
+hatch env create
+
+# Create the test environment with all test dependencies
+hatch env create test
+```
+
+### Setting Up the Database
+
+The test project uses SQLite by default. You don't need to manually create the database file as Django will create it automatically when needed.
+
+```bash
+# Activate the test environment
+hatch shell test
+
+# Create and apply migrations
+python manage.py makemigrations
+python manage.py migrate
+```
+
+This will create the SQLite database file at the location specified in settings.py (`./db.sqlite3`) and set up all necessary tables.
+
+### Activating Environments
+
+```bash
+# Activate the default environment
+hatch shell
+
+# Activate the test environment
+hatch shell test
+```
+
+### Running Tests
+
+```bash
+# Run tests with all configured options (coverage, etc.)
+hatch run test:pytest
+```
+
+### Important: Setting Up the Test Database
+
+Before running tests, you must create and apply migrations for the test app:
+
+```bash
+# Activate the test environment
+hatch shell test
+
+# Create migrations for the test app models (required before first test run)
+python manage.py makemigrations test_app
+
+# Apply all migrations
+python manage.py migrate
+```
+
+If you encounter "no such table" errors during testing, this usually means you need to run the migration steps above.
+
 ## Support me with a cup of coffee
 
 USDT (ERC20): `0x308dad9B7014AdeD217e817B6274EeeD971200F9`

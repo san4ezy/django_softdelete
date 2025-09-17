@@ -99,3 +99,9 @@ class NotSoftRelatedModel(models.Model):
     product = models.ForeignKey(
         ProductNotSoftRelations, on_delete=models.CASCADE, null=True
     )
+
+
+class NotSoftOneToOneModel(models.Model):
+    product = models.OneToOneField(
+        ProductNotSoftRelations, on_delete=models.CASCADE, null=True
+    )
