@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.22] - 2025-10-25
+
+### Fixed:
+
+- Removed extra prints flooding the log
+- Delete methods now return a correct counter stat (as a regular Django's methods)
+- Tests: covered new logic and an admin part
+
 ## [1.0.21] - 2025-09-17
 
 ### Fixed:
