@@ -79,8 +79,9 @@ class SoftDeleteModel(models.Model):
         :param kwargs: Additional keyword arguments.
         :return: None
         """
-        super().delete(*args, **kwargs)
+        response = super().delete(*args, **kwargs)
         post_hard_delete.send(sender=self.__class__, instance=self)
+        return response
 
     def delete(
             self,
