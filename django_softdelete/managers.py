@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from django.db import models
 
 
@@ -10,13 +12,30 @@ class SoftDeleteQuerySet(models.query.QuerySet):
     - hard_delete(): Hard deletes all objects in the QuerySet.
 
     """
-    def delete(self, strict: bool = False):
+
+    def delete(self, strict: bool = False, transaction_id: str = None, *args, **kwargs):
         """
-        Override delete method to perform soft deletion on the queryset.
+        Soft-deletes the objects in the queryset, aggregates the delete counts,
+        and returns the standard (count, dict_of_counts) tuple.
         """
-        for obj in self.all():
-            obj.delete(strict=strict)
-        return
+        total_count = 0
+        total_counts_dict = defaultdict(int)
+
+        # Use iterator to avoid loading all objects into memory at once
+        for obj in self.iterator():
+
+            count, counts_dict = obj.delete(
+                strict=strict,
+                transaction_id=transaction_id,
+                *args, **kwargs
+            )
+
+            # Aggregate the results
+            total_count += count
+            for model_name, deleted_count in counts_dict.items():
+                total_counts_dict[model_name] += deleted_count
+
+        return total_count, dict(total_counts_dict)
 
     def hard_delete(self):
         """

@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
 from django.db import transaction
@@ -77,7 +79,7 @@ class SoftDeleteModel(models.Model):
 
         :param args: Additional positional arguments.
         :param kwargs: Additional keyword arguments.
-        :return: None
+        :return: (count, dict_of_counts)
         """
         response = super().delete(*args, **kwargs)
         post_hard_delete.send(sender=self.__class__, instance=self)
@@ -91,16 +93,16 @@ class SoftDeleteModel(models.Model):
             *args, **kwargs,
     ):
         """
-        Delete the object and all related objects.
+        Soft-deletes the object and all related objects and returns a tuple
+        (number_of_objects_soft_deleted, dict_of_counts) mimicking the standard
+        Django delete response.
 
-        :param strict: Whether to enforce strict deletion by checking if related models
-                       are subclasses of SoftDeleteModel.
+        :param strict: Whether to enforce strict deletion.
         :param transaction_id: A UUID used to identify all objects that were deleted inside same transaction
         :param using: (str, optional) The database alias to use for the deletion.
-                      If not specified, the default database connection will be used.
         :param args: Additional positional arguments.
         :param kwargs: Additional keyword arguments.
-        :return: None
+        :return: (count, dict_of_counts)
         """
         pre_delete.send(
             sender=self.__class__, instance=self, using=using,
@@ -108,6 +110,11 @@ class SoftDeleteModel(models.Model):
 
         now = timezone.now()
         transaction_id = uuid.uuid4() if not transaction_id else transaction_id
+
+        # Initialize the response counter
+        total_count = 0
+        deleted_counts_dict = defaultdict(int)
+
         with transaction.atomic():
             for field in self._meta.get_fields():
 
@@ -125,8 +132,11 @@ class SoftDeleteModel(models.Model):
                         f"{RelatedModel.__name__} is not a subclass of SoftDeleteModel."
                     )
 
+                cascade_count = 0
+                cascade_counts_dict = {}
+
                 if field.one_to_one:
-                    self.__delete_related_one_to_one(
+                    cascade_count, cascade_counts_dict = self.__delete_related_one_to_one(
                         field, strict, transaction_id, *args, **kwargs
                     )
 
@@ -139,21 +149,32 @@ class SoftDeleteModel(models.Model):
                 #     print("M2M reverse", field.name, field.remote_field)  # field.remote_field?
 
                 elif field.one_to_many:
-                    self.__delete_related_one_to_many(field, strict, transaction_id, *args, **kwargs)
+                    cascade_count, cascade_counts_dict = self.__delete_related_one_to_many(field, strict, transaction_id, *args, **kwargs)
 
                 else:
                     continue
 
+                total_count += cascade_count
+                for model_name, count in cascade_counts_dict.items():
+                    deleted_counts_dict[model_name] += count
+
             self.deleted_at = now
             self.restored_at = None
             self.transaction_id = transaction_id
+
             self.save(
                 update_fields=['deleted_at', 'restored_at', 'transaction_id', ]
             )
 
+            # count the current instance
+            total_count += 1
+            deleted_counts_dict[self._meta.label] += 1
+
             post_soft_delete.send(
                 sender=self.__class__, instance=self, using=using,
             )
+
+        return total_count, deleted_counts_dict
 
     def restore(self, strict: bool = True, transaction_id: str = None, *args, **kwargs):
         """Restores a deleted object by setting the deleted_at field to None.
@@ -220,7 +241,7 @@ class SoftDeleteModel(models.Model):
         :param transaction_id: A UUID used to identify all objects that were deleted inside same transaction
         :param args: Additional positional arguments to be passed to the delete method of the related object.
         :param kwargs: Additional keyword arguments to be passed to the delete method of the related object.
-        :return: None
+        :return: (count, dict_of_counts)
 
         This method is used to delete a related object based on the given field and related object. The method performs different actions based on the value of the `on_delete` attribute of the
         * field.
@@ -245,6 +266,9 @@ class SoftDeleteModel(models.Model):
         Example usage:
             obj._delete_related_object(field, related_object, strict=True)
         """
+        # Initialize an empty response counter
+        deleted_counter = (0, {})
+
         if hasattr(field, 'on_delete'):
             on_delete = field.on_delete
         elif hasattr(field, 'remote_field') and hasattr(field.remote_field, 'on_delete'):
@@ -256,10 +280,10 @@ class SoftDeleteModel(models.Model):
             if isinstance(related_object, SoftDeleteModel):
                 if strict:
                     kwargs['strict'] = strict
-                related_object.delete(transaction_id=transaction_id, *args, **kwargs)
+                deleted_counter = related_object.delete(transaction_id=transaction_id, *args, **kwargs)
             else:
                 kwargs.pop("o2o_model", None)
-                related_object.delete(*args, **kwargs)
+                deleted_counter = related_object.delete(*args, **kwargs)
         elif on_delete == models.SET_NULL:
             setattr(related_object, field.remote_field.name, None)
             related_object.save()
@@ -316,6 +340,8 @@ class SoftDeleteModel(models.Model):
         except AttributeError:
             pass
 
+        return deleted_counter
+
     def __restore_related_object(self, field, related_object, strict, transaction_id, *args, **kwargs):
         """
         Restores a related object and saves it if it has a valid primary key.
@@ -352,8 +378,11 @@ class SoftDeleteModel(models.Model):
         :param transaction_id: A UUID used to identify all objects that were deleted inside same transaction
         :param args: Additional positional arguments passed to __delete_related_object method.
         :param kwargs: Additional keyword arguments passed to __delete_related_object method.
-        :return: None
+        :return: (count, dict_of_counts)
         """
+        # Initialize an empty response counter
+        deleted_counter = (0, {})
+
         related_object = getattr(self, field.name, None)
         if related_object:
             remote_model = field.remote_field.model
@@ -367,17 +396,19 @@ class SoftDeleteModel(models.Model):
             if hasattr(remote_model, related_query_name):
                 if kwargs.get('o2o_model') != transaction_id:
                     kwargs['o2o_remote'] = transaction_id
-                    self.__delete_related_object(
+                    deleted_counter = self.__delete_related_object(
                         field, related_object, strict, transaction_id, *args, **kwargs
                     )
             elif hasattr(self, related_query_name):
                 if kwargs.get('o2o_remote') != transaction_id:
                     kwargs['o2o_model'] = transaction_id
-                    self.__delete_related_object(
+                    deleted_counter = self.__delete_related_object(
                         field, related_object, strict, transaction_id, *args, **kwargs
                     )
 
-    def __delete_related_one_to_many(self, field, strict, *args, **kwargs):
+        return deleted_counter
+
+    def __delete_related_one_to_many(self, field, strict, transaction_id, *args, **kwargs):
         """
         Delete all related objects in a one-to-many relationship.
 
@@ -387,13 +418,23 @@ class SoftDeleteModel(models.Model):
         :type strict: bool
         :param args: additional positional arguments to be passed to __delete_related_object()
         :param kwargs: additional keyword arguments to be passed to __delete_related_object()
-        :return: None
+        :return: (count, dict_of_counts)
         """
+        # Initialize an empty response counter
+        total_count = 0
+        total_counts_dict = defaultdict(int)
+
         related_objects = getattr(self, field.get_accessor_name()).all()
         for related_object in related_objects:
-            self.__delete_related_object(
-                field, related_object, strict, *args, **kwargs
+            count, counts_dict = self.__delete_related_object(
+                field, related_object, strict, transaction_id, *args, **kwargs
             )
+            total_count += count
+
+            for model_name, deleted_count in counts_dict.items():
+                total_counts_dict[model_name] += deleted_count
+
+        return total_count, dict(total_counts_dict)
 
     # def __delete_related_many_to_many(self, field, strict, *args, **kwargs):
     #     """

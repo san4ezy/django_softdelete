@@ -1,3 +1,4 @@
+from collections import Counter
 from unittest.mock import patch
 
 import pytest
@@ -22,6 +23,9 @@ class TestSoftDeleteModel:
     of soft deletion and restoration of objects.
 
     """
+
+    # HELPER METHODS
+
     def assert_objects_count(self, model, a: int, d: int, g: int = None):
         """
         Assert Objects Count Method
@@ -73,6 +77,19 @@ class TestSoftDeleteModel:
         if g is not None:
             s.append(model.global_objects.filter(id=obj.id).exists() is g)
         return all(s)
+
+    def merge_counts(self, d1, d2):
+        """Merges two Django delete response count dictionaries."""
+        merged = Counter(d1)
+        merged.update(d2)
+        return dict(merged)
+
+
+    def get_model_key(self, instance: SoftDeleteModel) -> str:
+        """Returns the standard Django delete key 'app_label.model_name'."""
+        return instance._meta.label
+
+    # TESTS
 
     def test_is_deleted(self, product):
         """
@@ -459,3 +476,97 @@ class TestSoftDeleteModel:
     #     print(ShopEmployee.global_objects.all())
     #     assert not shop.sellers.filter(employee=employee).exists()
     #     assert employee not in shop.employees.all()
+
+    def test_soft_delete_returns_count(self, product):
+        model_key = self.get_model_key(product)
+        expected_counts = {model_key: 1}
+
+        count, counts_dict = product.delete()
+
+        assert count == 1
+        assert counts_dict == expected_counts
+
+        product.refresh_from_db()
+        assert product.is_deleted
+
+    def test_hard_delete_returns_count(self, product):
+        model_key = self.get_model_key(product)
+        expected_counts = {model_key: 1}
+
+        count, counts_dict = product.hard_delete()
+
+        assert count == 1
+        assert counts_dict == expected_counts
+
+        assert not Product.global_objects.filter(id=product.id).exists()
+
+    def test_queryset_soft_delete_returns_count(self, product_factory):
+        obj1 = product_factory()
+        obj2 = product_factory()
+
+        model_key = self.get_model_key(obj1)
+        expected_counts = {model_key: 2}
+
+        count, counts_dict = Product.objects.filter(id__in=[obj1.id, obj2.id]).delete()
+
+        assert count == 2
+        assert counts_dict == expected_counts
+
+        obj1.refresh_from_db()
+        obj2.refresh_from_db()
+        assert obj1.is_deleted
+        assert obj2.is_deleted
+        assert self.assert_objects_count(Product, 0, 2, 2)
+
+    def test_queryset_hard_delete_returns_count(self, product_factory):
+        obj1 = product_factory()
+        obj2 = product_factory()
+
+        model_key = self.get_model_key(obj1)
+        expected_counts = {model_key: 2}
+
+        count, counts_dict = Product.objects.filter(id__in=[obj1.id, obj2.id]).hard_delete()
+
+        assert count == 2
+        assert counts_dict == expected_counts
+
+        assert self.assert_objects_count(Product, 0, 0, 0)
+
+    def test_soft_delete_cascade_returns_count(self, product_factory, option, product_landing):
+        product = product_factory(option=option, landing=product_landing)
+
+        expected_counts = {
+            self.get_model_key(product): 1,
+            self.get_model_key(option): 1,
+            self.get_model_key(product_landing): 1,
+        }
+
+        count, counts_dict = product.delete()
+
+        assert count == 3
+        assert Counter(counts_dict) == Counter(expected_counts)
+
+        product.refresh_from_db()
+        option.refresh_from_db()
+        product_landing.refresh_from_db()
+        assert product.is_deleted
+        assert option.is_deleted
+        assert product_landing.is_deleted
+
+    def test_hard_delete_cascade_returns_count(self, option):
+        product = option.product
+
+        expected_counts = {
+            self.get_model_key(product): 1,
+            self.get_model_key(option): 1,
+        }
+
+        count, counts_dict = product.hard_delete()
+
+        assert count == len(expected_counts)
+        assert Counter(counts_dict) == Counter(expected_counts)
+
+        with pytest.raises(Product.DoesNotExist):
+            Product.global_objects.get(id=product.id)
+        with pytest.raises(Option.DoesNotExist):
+            Option.global_objects.get(id=option.id)
