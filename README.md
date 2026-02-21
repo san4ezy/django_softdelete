@@ -103,7 +103,9 @@ class Article(SoftDeleteModel):
 
 ### 3. Configure Your Project
 
-Add your new `core` app to the `INSTALLED_APPS` list in `myproject/settings.py`.
+Edit `myproject/settings.py`:
+- Add `django_softdelete` to the `INSTALLED_APPS` so Django can find required templates.
+- Add your new `core` app to the `INSTALLED_APPS` list in .
 
 ```python
 # myproject/settings.py
@@ -115,6 +117,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_softdelete',
     # Add your app here
     'core',
 ]
