@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.23] - 2026-02-21
+
+### Fixed:
+
+- Added `alters_data = True` attribute to `restore()`, `delete()`, and `hard_delete()` methods on both models and querysets. This prevents these methods from being accidentally executed from Django templates, following Django security best practices (Issue #67). Issue described here: https://github.com/san4ezy/django_softdelete/issues/67 .
+- Added regression tests to ensure data-altering methods remain protected from template execution.
+
 ## [1.0.22] - 2025-10-25
 
 ### Fixed:

@@ -36,12 +36,14 @@ class SoftDeleteQuerySet(models.query.QuerySet):
                 total_counts_dict[model_name] += deleted_count
 
         return total_count, dict(total_counts_dict)
+    delete.alters_data = True
 
     def hard_delete(self):
         """
         Hard delete the objects permanently.
         """
         return super().delete()
+    hard_delete.alters_data = True
 
 
 class DeletedQuerySet(models.query.QuerySet):
@@ -62,12 +64,14 @@ class DeletedQuerySet(models.query.QuerySet):
         for obj in qs:
             obj.restore(strict=strict)
         return
+    restore.alters_data = True
 
     def hard_delete(self):
         """
         Hard delete the objects permanently.
         """
         return super().delete()
+    hard_delete.alters_data = True
 
 
 class GlobalQuerySet(models.query.QuerySet):
@@ -85,6 +89,7 @@ class GlobalQuerySet(models.query.QuerySet):
         for obj in self.all():
             obj.delete(strict=strict)
         return
+    delete.alters_data = True
 
     def restore(self, strict: bool = True, *args, **kwargs):
         """
@@ -99,12 +104,14 @@ class GlobalQuerySet(models.query.QuerySet):
         for obj in qs:
             obj.restore(strict=strict)
         return
+    restore.alters_data = True
 
     def hard_delete(self):
         """
         Hard delete the objects permanently.
         """
         return super().delete()
+    hard_delete.alters_data = True
 
 
 class SoftDeleteManager(models.Manager):

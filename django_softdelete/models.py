@@ -84,6 +84,7 @@ class SoftDeleteModel(models.Model):
         response = super().delete(*args, **kwargs)
         post_hard_delete.send(sender=self.__class__, instance=self)
         return response
+    hard_delete.alters_data = True
 
     def delete(
             self,
@@ -175,6 +176,7 @@ class SoftDeleteModel(models.Model):
             )
 
         return total_count, deleted_counts_dict
+    delete.alters_data = True
 
     def restore(self, strict: bool = True, transaction_id: str = None, *args, **kwargs):
         """Restores a deleted object by setting the deleted_at field to None.
@@ -230,6 +232,7 @@ class SoftDeleteModel(models.Model):
                 update_fields=['deleted_at', 'restored_at', 'transaction_id', ]
             )
             post_restore.send(sender=self.__class__, instance=self)
+    restore.alters_data = True
 
     # PRIVATE SECTION
 
