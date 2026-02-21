@@ -229,7 +229,7 @@ class SoftDeleteModel(models.Model):
             self.save(
                 update_fields=['deleted_at', 'restored_at', 'transaction_id', ]
             )
-            post_restore.send(sender=self.__class__, instance=self)
+            post_restore.send(sender=self.__class__, instance=self, transaction_id=transaction_id)
 
     # PRIVATE SECTION
 
