@@ -2,9 +2,11 @@ from collections import Counter
 from unittest.mock import patch
 
 import pytest
+from django.db import connection
 from django.db.models.deletion import ProtectedError
 from django.db.models.signals import pre_delete
 from django.db.models.signals import post_delete
+from django.test.utils import CaptureQueriesContext
 
 from django_softdelete.exceptions import SoftDeleteException
 from django_softdelete.signals import post_soft_delete
@@ -88,6 +90,11 @@ class TestSoftDeleteModel:
     def get_model_key(self, instance: SoftDeleteModel) -> str:
         """Returns the standard Django delete key 'app_label.model_name'."""
         return instance._meta.label
+
+    def get_query_count(self, operation):
+        with CaptureQueriesContext(connection) as captured:
+            operation()
+        return len(captured)
 
     # TESTS
 
@@ -211,6 +218,22 @@ class TestSoftDeleteModel:
         obj3.refresh_from_db()
         assert not obj3.is_deleted
 
+    def test_queryset_soft_delete_query_count_not_linear(self, product_factory):
+        small = [product_factory() for _ in range(2)]
+        large = [product_factory() for _ in range(20)]
+
+        small_ids = [obj.id for obj in small]
+        large_ids = [obj.id for obj in large]
+
+        small_query_count = self.get_query_count(
+            lambda: Product.objects.filter(id__in=small_ids).delete()
+        )
+        large_query_count = self.get_query_count(
+            lambda: Product.objects.filter(id__in=large_ids).delete()
+        )
+
+        assert (large_query_count - small_query_count) <= 4
+
     def test_queryset_hard_delete(self, product_factory):
         """
         Test the hard delete functionality of the queryset.
@@ -258,6 +281,25 @@ class TestSoftDeleteModel:
         assert obj3.is_deleted
         assert not obj3.is_restored
 
+    def test_queryset_restore_query_count_not_linear(self, product_factory):
+        small = [product_factory() for _ in range(2)]
+        large = [product_factory() for _ in range(20)]
+
+        small_ids = [obj.id for obj in small]
+        large_ids = [obj.id for obj in large]
+
+        Product.objects.filter(id__in=small_ids).delete()
+        Product.objects.filter(id__in=large_ids).delete()
+
+        small_query_count = self.get_query_count(
+            lambda: Product.deleted_objects.filter(id__in=small_ids).restore()
+        )
+        large_query_count = self.get_query_count(
+            lambda: Product.deleted_objects.filter(id__in=large_ids).restore()
+        )
+
+        assert (large_query_count - small_query_count) <= 4
+
     def test_delete_cascade(self, product_factory, option, product_landing, shop):
         """
         The test_delete_cascade method is responsible for testing the cascade
@@ -277,6 +319,20 @@ class TestSoftDeleteModel:
         # The model the product related to is still alive
         assert self.assert_object_in(shop, True, False, True)
         assert not shop.is_deleted
+
+    def test_delete_cascade_query_count_not_linear(self, product_factory):
+        small_product = product_factory()
+        large_product = product_factory()
+
+        for i in range(2):
+            Option.objects.create(product=small_product, name=f"small-{i}")
+        for i in range(20):
+            Option.objects.create(product=large_product, name=f"large-{i}")
+
+        small_query_count = self.get_query_count(lambda: small_product.delete())
+        large_query_count = self.get_query_count(lambda: large_product.delete())
+
+        assert (large_query_count - small_query_count) <= 4
 
     def test_restore_cascade(self, option, product_image):
         """
@@ -517,6 +573,41 @@ class TestSoftDeleteModel:
         assert obj1.is_deleted
         assert obj2.is_deleted
         assert self.assert_objects_count(Product, 0, 2, 2)
+
+    def test_queryset_soft_delete_uses_single_transaction_id(self, product_factory):
+        obj1 = product_factory()
+        obj2 = product_factory()
+
+        Product.objects.filter(id__in=[obj1.id, obj2.id]).delete()
+
+        obj1 = Product.global_objects.get(id=obj1.id)
+        obj2 = Product.global_objects.get(id=obj2.id)
+        assert obj1.transaction_id == obj2.transaction_id
+
+    def test_queryset_soft_delete_emits_per_instance_soft_delete_signal_by_default(
+            self, product_factory, signal_mock
+    ):
+        obj1 = product_factory()
+        obj2 = product_factory()
+        obj3 = product_factory()
+
+        with signal_mock(post_soft_delete, Product) as post_soft_delete_mock:
+            Product.objects.filter(id__in=[obj1.id, obj2.id, obj3.id]).delete()
+
+        assert post_soft_delete_mock.call_count == 3
+
+    def test_queryset_restore_emits_per_instance_restore_signal_by_default(
+            self, product_factory, signal_mock
+    ):
+        obj1 = product_factory()
+        obj2 = product_factory()
+        obj3 = product_factory()
+        Product.objects.filter(id__in=[obj1.id, obj2.id, obj3.id]).delete()
+
+        with signal_mock(post_restore, Product) as post_restore_mock:
+            Product.deleted_objects.filter(id__in=[obj1.id, obj2.id, obj3.id]).restore()
+
+        assert post_restore_mock.call_count == 3
 
     def test_queryset_hard_delete_returns_count(self, product_factory):
         obj1 = product_factory()

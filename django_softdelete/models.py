@@ -150,7 +150,9 @@ class SoftDeleteModel(models.Model):
                 #     print("M2M reverse", field.name, field.remote_field)  # field.remote_field?
 
                 elif field.one_to_many:
-                    cascade_count, cascade_counts_dict = self.__delete_related_one_to_many(field, strict, transaction_id, *args, **kwargs)
+                    cascade_count, cascade_counts_dict = self.__delete_related_one_to_many(
+                        field, strict, transaction_id, *args, **kwargs
+                    )
 
                 else:
                     continue
@@ -178,7 +180,330 @@ class SoftDeleteModel(models.Model):
         return total_count, deleted_counts_dict
     delete.alters_data = True
 
-    def restore(self, strict: bool = True, transaction_id: str = None, *args, **kwargs):
+    @classmethod
+    def _iterative_soft_delete_queryset(
+            cls,
+            queryset,
+            strict: bool = False,
+            transaction_id: str = None,
+            using=None,
+            *args, **kwargs,
+    ):
+        total_count = 0
+        total_counts_dict = defaultdict(int)
+
+        for obj in queryset.iterator():
+            count, counts_dict = obj.delete(
+                strict=strict,
+                transaction_id=transaction_id,
+                using=using,
+                *args, **kwargs
+            )
+            total_count += count
+            for model_name, deleted_count in counts_dict.items():
+                total_counts_dict[model_name] += deleted_count
+
+        return total_count, dict(total_counts_dict)
+
+    @classmethod
+    def _soft_delete_queryset(
+            cls,
+            queryset,
+            strict: bool = False,
+            transaction_id: str = None,
+            using=None,
+            _visited=None,
+            *args, **kwargs,
+    ):
+        transaction_id = uuid.uuid4() if not transaction_id else transaction_id
+        now = timezone.now()
+
+        queryset = queryset.filter(deleted_at__isnull=True)
+        parent_ids = list(queryset.values_list("pk", flat=True))
+        if _visited is None:
+            _visited = set()
+        node_ids = [
+            obj_id for obj_id in parent_ids if (cls._meta.label, obj_id) not in _visited
+        ]
+        for obj_id in node_ids:
+            _visited.add((cls._meta.label, obj_id))
+        parent_ids = node_ids
+        if not parent_ids:
+            return 0, {}
+        queryset = queryset.filter(pk__in=parent_ids)
+
+        for field in cls._meta.get_fields():
+            if isinstance(field, GenericRelation):
+                continue
+            if not field.one_to_one:
+                continue
+            if hasattr(field, "attname"):
+                if queryset.filter(**{f"{field.attname}__isnull": False}).exists():
+                    return cls._iterative_soft_delete_queryset(
+                        queryset,
+                        strict=strict,
+                        transaction_id=transaction_id,
+                        using=using,
+                        *args, **kwargs,
+                    )
+
+        supported_on_delete = {
+            models.CASCADE,
+            models.PROTECT,
+            models.RESTRICT,
+            models.SET_NULL,
+            models.SET_DEFAULT,
+            models.DO_NOTHING,
+        }
+        for field in cls._meta.get_fields():
+            if isinstance(field, GenericRelation) or not field.one_to_many:
+                continue
+            if hasattr(field, 'on_delete'):
+                on_delete = field.on_delete
+            elif hasattr(field, 'remote_field') and hasattr(field.remote_field, 'on_delete'):
+                on_delete = field.remote_field.on_delete
+            else:
+                continue
+            if on_delete in supported_on_delete:
+                continue
+            related_queryset = field.related_model.objects.filter(
+                **{f"{field.remote_field.name}__in": parent_ids}
+            )
+            if related_queryset.exists():
+                return cls._iterative_soft_delete_queryset(
+                    queryset,
+                    strict=strict,
+                    transaction_id=transaction_id,
+                    using=using,
+                    *args, **kwargs,
+                )
+
+        total_count = 0
+        deleted_counts_dict = defaultdict(int)
+        objects_for_signals = list(queryset)
+
+        with transaction.atomic():
+            for obj in objects_for_signals:
+                pre_delete.send(sender=cls, instance=obj, using=using)
+
+            for field in cls._meta.get_fields():
+                if isinstance(field, GenericRelation):
+                    continue
+
+                RelatedModel = field.related_model
+                if not RelatedModel:
+                    continue
+
+                if strict and not issubclass(RelatedModel, SoftDeleteModel):
+                    raise SoftDeleteException(
+                        f"{RelatedModel.__name__} is not a subclass of SoftDeleteModel."
+                    )
+
+                if not field.one_to_many:
+                    continue
+
+                if hasattr(field, 'on_delete'):
+                    on_delete = field.on_delete
+                elif hasattr(field, 'remote_field') and hasattr(field.remote_field, 'on_delete'):
+                    on_delete = field.remote_field.on_delete
+                else:
+                    continue
+
+                related_filter = {f"{field.remote_field.name}__in": parent_ids}
+                related_queryset = RelatedModel.objects.filter(**related_filter)
+
+                if on_delete == models.CASCADE:
+                    if issubclass(RelatedModel, SoftDeleteModel):
+                        cascade_count, cascade_counts_dict = RelatedModel._soft_delete_queryset(
+                            related_queryset,
+                            strict=strict,
+                            transaction_id=transaction_id,
+                            using=using,
+                            _visited=_visited,
+                            *args, **kwargs,
+                        )
+                    else:
+                        hard_kwargs = dict(kwargs)
+                        cascade_count, cascade_counts_dict = related_queryset.delete(
+                            *args, **hard_kwargs
+                        )
+                elif on_delete == models.PROTECT:
+                    if related_queryset.exists():
+                        raise ProtectedError(
+                            f"Cannot delete queryset of {cls.__name__} because related objects "
+                            f"of {RelatedModel.__name__} are protected",
+                            list(related_queryset),
+                        )
+                    cascade_count, cascade_counts_dict = 0, {}
+                elif on_delete == models.RESTRICT:
+                    if related_queryset.exists():
+                        raise ProtectedError(
+                            f"Cannot delete queryset of {cls.__name__} because related objects "
+                            f"of {RelatedModel.__name__} are restricted",
+                            list(related_queryset),
+                        )
+                    cascade_count, cascade_counts_dict = 0, {}
+                elif on_delete == models.SET_NULL:
+                    related_queryset.update(**{field.remote_field.name: None})
+                    cascade_count, cascade_counts_dict = 0, {}
+                elif on_delete == models.SET_DEFAULT:
+                    default_value = field.remote_field.get_default()
+                    related_queryset.update(**{field.remote_field.name: default_value})
+                    cascade_count, cascade_counts_dict = 0, {}
+                elif on_delete == models.DO_NOTHING:
+                    cascade_count, cascade_counts_dict = 0, {}
+                else:
+                    cascade_count, cascade_counts_dict = 0, {}
+
+                total_count += cascade_count
+                for model_name, count in cascade_counts_dict.items():
+                    deleted_counts_dict[model_name] += count
+
+            updated_count = cls.global_objects.filter(
+                pk__in=parent_ids, deleted_at__isnull=True
+            ).update(
+                deleted_at=now,
+                restored_at=None,
+                transaction_id=transaction_id,
+            )
+
+            total_count += updated_count
+            deleted_counts_dict[cls._meta.label] += updated_count
+
+            for obj in objects_for_signals:
+                obj.deleted_at = now
+                obj.restored_at = None
+                obj.transaction_id = transaction_id
+                post_soft_delete.send(sender=cls, instance=obj, using=using)
+
+        return total_count, dict(deleted_counts_dict)
+
+    @classmethod
+    def _iterative_restore_queryset(
+            cls,
+            queryset,
+            strict: bool = True,
+            transaction_id: str = None,
+            *args, **kwargs,
+    ):
+        for obj in queryset.iterator():
+            obj.restore(
+                strict=strict,
+                transaction_id=transaction_id,
+                *args, **kwargs
+            )
+        return
+
+    @classmethod
+    def _restore_queryset(
+            cls,
+            queryset,
+            strict: bool = True,
+            transaction_id: str = None,
+            using=None,
+            _visited=None,
+            *args, **kwargs,
+    ):
+        queryset = queryset.filter(deleted_at__isnull=False)
+        parent_rows = list(queryset.values_list("pk", "transaction_id"))
+        if not parent_rows:
+            return
+
+        if _visited is None:
+            _visited = set()
+
+        parent_rows = [
+            row for row in parent_rows if (cls._meta.label, row[0]) not in _visited
+        ]
+        for pk, _ in parent_rows:
+            _visited.add((cls._meta.label, pk))
+
+        if not parent_rows:
+            return
+
+        parent_ids = [pk for pk, _ in parent_rows]
+        queryset = queryset.filter(pk__in=parent_ids)
+
+        if transaction_id is None:
+            tx_values = {tx for _, tx in parent_rows}
+            if len(tx_values) != 1:
+                return cls._iterative_restore_queryset(
+                    queryset,
+                    strict=strict,
+                    *args, **kwargs,
+                )
+            transaction_id = tx_values.pop()
+
+        for field in cls._meta.get_fields():
+            if isinstance(field, GenericRelation):
+                continue
+            if not field.one_to_one:
+                continue
+            if hasattr(field, "attname"):
+                if queryset.filter(**{f"{field.attname}__isnull": False}).exists():
+                    return cls._iterative_restore_queryset(
+                        queryset,
+                        strict=strict,
+                        transaction_id=transaction_id,
+                        *args, **kwargs,
+                    )
+
+        objects_for_signals = list(queryset)
+
+        with transaction.atomic():
+            for field in cls._meta.get_fields():
+                if isinstance(field, GenericRelation):
+                    continue
+
+                RelatedModel = field.related_model
+                if not RelatedModel:
+                    continue
+
+                if strict and not issubclass(RelatedModel, SoftDeleteModel):
+                    raise SoftDeleteException(
+                        f"{RelatedModel.__name__} is not a subclass of SoftDeleteModel."
+                    )
+
+                if not field.one_to_many or not issubclass(RelatedModel, SoftDeleteModel):
+                    continue
+
+                related_filter = {
+                    f"{field.remote_field.name}__in": parent_ids,
+                    "transaction_id": transaction_id,
+                }
+                RelatedModel._restore_queryset(
+                    RelatedModel.deleted_objects.filter(**related_filter),
+                    strict=strict,
+                    transaction_id=transaction_id,
+                    using=using,
+                    _visited=_visited,
+                    *args, **kwargs,
+                )
+
+            now = timezone.now()
+            cls.deleted_objects.filter(pk__in=parent_ids).update(
+                deleted_at=None,
+                restored_at=now,
+                transaction_id=None,
+            )
+
+            for obj in objects_for_signals:
+                obj.deleted_at = None
+                obj.restored_at = now
+                obj.transaction_id = None
+                post_restore.send(
+                    sender=cls,
+                    instance=obj,
+                    transaction_id=transaction_id,
+                )
+        return
+
+    def restore(
+            self,
+            strict: bool = True,
+            transaction_id: str = None,
+            *args, **kwargs
+    ):
         """Restores a deleted object by setting the deleted_at field to None.
 
         :param strict: A boolean indicating whether to perform strict restoration.
@@ -211,7 +536,9 @@ class SoftDeleteModel(models.Model):
                     )
 
                 if field.one_to_one:
-                    self.__restore_related_one_to_one(field, strict, transaction_id, *args, **kwargs)
+                    self.__restore_related_one_to_one(
+                        field, strict, transaction_id, *args, **kwargs
+                    )
 
                 # elif field.many_to_many:
                 #     # M2M must not be restored
@@ -231,12 +558,18 @@ class SoftDeleteModel(models.Model):
             self.save(
                 update_fields=['deleted_at', 'restored_at', 'transaction_id', ]
             )
-            post_restore.send(sender=self.__class__, instance=self, transaction_id=transaction_id)
+            post_restore.send(
+                sender=self.__class__,
+                instance=self,
+                transaction_id=transaction_id,
+            )
     restore.alters_data = True
 
     # PRIVATE SECTION
 
-    def __delete_related_object(self, field, related_object, strict, transaction_id, *args, **kwargs):
+    def __delete_related_object(
+            self, field, related_object, strict, transaction_id, *args, **kwargs
+    ):
         """
         :param field: The field that defines the relationship between the current object and the related object.
         :param related_object: The related object that needs to be deleted.
@@ -283,7 +616,10 @@ class SoftDeleteModel(models.Model):
             if isinstance(related_object, SoftDeleteModel):
                 if strict:
                     kwargs['strict'] = strict
-                deleted_counter = related_object.delete(transaction_id=transaction_id, *args, **kwargs)
+                deleted_counter = related_object.delete(
+                    transaction_id=transaction_id,
+                    *args, **kwargs
+                )
             else:
                 kwargs.pop("o2o_model", None)
                 deleted_counter = related_object.delete(*args, **kwargs)
@@ -345,7 +681,9 @@ class SoftDeleteModel(models.Model):
 
         return deleted_counter
 
-    def __restore_related_object(self, field, related_object, strict, transaction_id, *args, **kwargs):
+    def __restore_related_object(
+            self, field, related_object, strict, transaction_id, *args, **kwargs
+    ):
         """
         Restores a related object and saves it if it has a valid primary key.
 
@@ -365,14 +703,20 @@ class SoftDeleteModel(models.Model):
         :rtype: None
         """
         if related_object.is_deleted:
-            related_object.restore(strict=strict, transaction_id=transaction_id, *args, **kwargs)
+            related_object.restore(
+                strict=strict,
+                transaction_id=transaction_id,
+                *args, **kwargs
+            )
             try:
                 if related_object.pk is not None:
                     related_object.save()
             except AttributeError:
                 pass
 
-    def __delete_related_one_to_one(self, field, strict, transaction_id, *args, **kwargs):
+    def __delete_related_one_to_one(
+            self, field, strict, transaction_id, *args, **kwargs
+    ):
         """
         Delete related one-to-one object.
 
@@ -411,7 +755,9 @@ class SoftDeleteModel(models.Model):
 
         return deleted_counter
 
-    def __delete_related_one_to_many(self, field, strict, transaction_id, *args, **kwargs):
+    def __delete_related_one_to_many(
+            self, field, strict, transaction_id, *args, **kwargs
+    ):
         """
         Delete all related objects in a one-to-many relationship.
 
@@ -428,6 +774,24 @@ class SoftDeleteModel(models.Model):
         total_counts_dict = defaultdict(int)
 
         related_objects = getattr(self, field.get_accessor_name()).all()
+        if hasattr(field, 'on_delete'):
+            on_delete = field.on_delete
+        elif hasattr(field, 'remote_field') and hasattr(field.remote_field, 'on_delete'):
+            on_delete = field.remote_field.on_delete
+        else:
+            on_delete = None
+
+        if (
+                on_delete == models.CASCADE
+                and issubclass(field.related_model, SoftDeleteModel)
+        ):
+            return field.related_model._soft_delete_queryset(
+                related_objects,
+                strict=strict,
+                transaction_id=transaction_id,
+                *args, **kwargs,
+            )
+
         for related_object in related_objects:
             count, counts_dict = self.__delete_related_object(
                 field, related_object, strict, transaction_id, *args, **kwargs
@@ -459,7 +823,9 @@ class SoftDeleteModel(models.Model):
     #             field, related_object, strict, *args, **kwargs
     #         )
 
-    def __restore_related_one_to_one(self, field, strict, transaction_id, *args, **kwargs):
+    def __restore_related_one_to_one(
+            self, field, strict, transaction_id, *args, **kwargs
+    ):
         """
         :param field: Field object representing the one-to-one relationship.
         :param strict: Flag indicating whether to raise an exception if the related object is not found.
@@ -474,7 +840,9 @@ class SoftDeleteModel(models.Model):
                 field, related_object, strict, transaction_id, *args, **kwargs
             )
 
-    def __restore_related_one_to_many(self, field, strict, transaction_id, *args, **kwargs):
+    def __restore_related_one_to_many(
+            self, field, strict, transaction_id, *args, **kwargs
+    ):
         """
         This method is used to restore related objects in a one-to-many relationship.
 
@@ -489,13 +857,14 @@ class SoftDeleteModel(models.Model):
         remote_model = field.remote_field.model
         if not issubclass(remote_model, SoftDeleteModel):
             raise ValueError('No related objects found')
-        # TODO: it would be better to save object manager names in the variables
-        for related_object in remote_model.deleted_objects.filter(
-            **{remote_field.name: self, "transaction_id": transaction_id}
-        ):
-            self.__restore_related_object(
-                field, related_object, strict, transaction_id, *args, **kwargs
-            )
+        remote_model._restore_queryset(
+            remote_model.deleted_objects.filter(
+                **{remote_field.name: self, "transaction_id": transaction_id}
+            ),
+            strict=strict,
+            transaction_id=transaction_id,
+            *args, **kwargs,
+        )
 
     # def __restore_related_many_to_many(self, field, strict, *args, **kwargs):
     #     """

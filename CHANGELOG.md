@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed:
+
+- Optimize `SoftDeleteQuerySet.delete()` to use a bulk soft-delete path, reducing N+1 query behavior and assigning a single `transaction_id` across the queryset operation.
+- Optimize one-to-many `CASCADE` soft-delete paths to batch soft-delete related `SoftDeleteModel` rows instead of deleting each related row one-by-one.
+- Optimize `DeletedQuerySet.restore()` to use a bulk restore path, reducing N+1 query behavior and keeping transaction-scoped restore semantics.
+- Add regression tests for queryset/cascade delete/restore query scaling and bulk delete `transaction_id` consistency.
+
 ## [1.0.23] - 2026-02-21
 
 ### Fixed:
