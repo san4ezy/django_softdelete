@@ -116,7 +116,7 @@ class SoftDeleteModel(models.Model):
         total_count = 0
         deleted_counts_dict = defaultdict(int)
 
-        with transaction.atomic():
+        with transaction.atomic(using=using, savepoint=False):
             for field in self._meta.get_fields():
 
                 # Skip generic relations
@@ -219,15 +219,18 @@ class SoftDeleteModel(models.Model):
         now = timezone.now()
 
         queryset = queryset.filter(deleted_at__isnull=True)
-        parent_ids = list(queryset.values_list("pk", flat=True))
+        objects_for_signals = list(queryset)
         if _visited is None:
             _visited = set()
-        node_ids = [
-            obj_id for obj_id in parent_ids if (cls._meta.label, obj_id) not in _visited
-        ]
-        for obj_id in node_ids:
+        filtered_objects = []
+        for obj in objects_for_signals:
+            obj_id = obj.pk
+            if (cls._meta.label, obj_id) in _visited:
+                continue
             _visited.add((cls._meta.label, obj_id))
-        parent_ids = node_ids
+            filtered_objects.append(obj)
+        objects_for_signals = filtered_objects
+        parent_ids = [obj.pk for obj in objects_for_signals]
         if not parent_ids:
             return 0, {}
         queryset = queryset.filter(pk__in=parent_ids)
@@ -280,9 +283,7 @@ class SoftDeleteModel(models.Model):
 
         total_count = 0
         deleted_counts_dict = defaultdict(int)
-        objects_for_signals = list(queryset)
-
-        with transaction.atomic():
+        with transaction.atomic(using=using, savepoint=False):
             for obj in objects_for_signals:
                 pre_delete.send(sender=cls, instance=obj, using=using)
 

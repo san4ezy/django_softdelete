@@ -234,6 +234,35 @@ class TestSoftDeleteModel:
 
         assert (large_query_count - small_query_count) <= 4
 
+    def test_queryset_soft_delete_avoids_pk_only_prefetch(self, product_factory):
+        product = product_factory()
+        Option.objects.create(product=product, name="o1")
+        Option.objects.create(product=product, name="o2")
+
+        with CaptureQueriesContext(connection) as captured:
+            Product.objects.filter(id=product.id).delete()
+
+        option_queries = [
+            q["sql"] for q in captured.captured_queries if '"test_app_option"' in q["sql"]
+        ]
+        assert not any(' AS "pk"' in sql for sql in option_queries)
+
+    def test_queryset_soft_delete_has_no_nested_savepoints(self, product_factory):
+        product = product_factory()
+        Option.objects.create(product=product, name="o1")
+        Option.objects.create(product=product, name="o2")
+
+        with CaptureQueriesContext(connection) as captured:
+            Product.objects.filter(id=product.id).delete()
+
+        savepoint_queries = [
+            q["sql"]
+            for q in captured.captured_queries
+            if q["sql"].startswith("SAVEPOINT")
+            or q["sql"].startswith("RELEASE SAVEPOINT")
+        ]
+        assert savepoint_queries == []
+
     def test_queryset_hard_delete(self, product_factory):
         """
         Test the hard delete functionality of the queryset.
