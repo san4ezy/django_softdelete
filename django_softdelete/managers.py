@@ -18,6 +18,15 @@ class SoftDeleteQuerySet(models.query.QuerySet):
         Soft-deletes the objects in the queryset, aggregates the delete counts,
         and returns the standard (count, dict_of_counts) tuple.
         """
+        bulk_soft_delete = getattr(self.model, "_soft_delete_queryset", None)
+        if callable(bulk_soft_delete):
+            return bulk_soft_delete(
+                self,
+                strict=strict,
+                transaction_id=transaction_id,
+                *args, **kwargs
+            )
+
         total_count = 0
         total_counts_dict = defaultdict(int)
 
@@ -52,7 +61,12 @@ class DeletedQuerySet(models.query.QuerySet):
 
     restore(*args, **kwargs) - Restore deleted objects based on the given filter arguments.
     """
-    def restore(self, strict: bool = True, *args, **kwargs):
+    def restore(
+            self,
+            strict: bool = True,
+            transaction_id: str = None,
+            *args, **kwargs
+    ):
         """
         Restore items from the trash.
 
@@ -61,8 +75,20 @@ class DeletedQuerySet(models.query.QuerySet):
         :return: None.
         """
         qs = self.filter(*args, **kwargs)
+        bulk_restore = getattr(self.model, "_restore_queryset", None)
+        if callable(bulk_restore):
+            bulk_restore(
+                qs,
+                strict=strict,
+                transaction_id=transaction_id,
+            )
+            return
+
         for obj in qs:
-            obj.restore(strict=strict)
+            obj.restore(
+                strict=strict,
+                transaction_id=transaction_id,
+            )
         return
     restore.alters_data = True
 
@@ -91,7 +117,12 @@ class GlobalQuerySet(models.query.QuerySet):
         return
     delete.alters_data = True
 
-    def restore(self, strict: bool = True, *args, **kwargs):
+    def restore(
+            self,
+            strict: bool = True,
+            transaction_id: str = None,
+            *args, **kwargs
+    ):
         """
         Restore items from the trash.
 
@@ -101,8 +132,20 @@ class GlobalQuerySet(models.query.QuerySet):
         :return: None.
         """
         qs = self.filter(*args, **kwargs)
+        bulk_restore = getattr(self.model, "_restore_queryset", None)
+        if callable(bulk_restore):
+            bulk_restore(
+                qs,
+                strict=strict,
+                transaction_id=transaction_id,
+            )
+            return
+
         for obj in qs:
-            obj.restore(strict=strict)
+            obj.restore(
+                strict=strict,
+                transaction_id=transaction_id,
+            )
         return
     restore.alters_data = True
 
