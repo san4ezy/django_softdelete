@@ -307,11 +307,12 @@ class SoftDeleteModel(models.Model):
         else:  # M2M
             related_object.delete(strict=strict, *args, **kwargs)
 
-        try:
-            if related_object.pk is not None:
-                related_object.save()
-        except AttributeError:
-            pass
+        # Each branch above persists its own changes when needed (CASCADE
+        # recurses into delete(); SET_NULL/SET_DEFAULT/SET call save() after
+        # mutating the field; PROTECT/RESTRICT raise; DO_NOTHING is a no-op
+        # by contract). An unconditional save() here would either duplicate
+        # writes or, for DO_NOTHING, mutate auto_now fields and trigger save
+        # side-effects on objects that the caller asked us not to touch.
 
     def __restore_related_object(self, field, related_object, strict, transaction_id, *args, **kwargs):
         """

@@ -81,6 +81,12 @@ class Lead(SoftDeleteModel):
     name = models.CharField(max_length=32)
 
 
+class Note(SoftDeleteModel):
+    product = models.ForeignKey(Product, on_delete=models.DO_NOTHING, null=True)
+    name = models.CharField(max_length=32)
+    edited_at = models.DateTimeField(auto_now=True)
+
+
 class ProductNotSoftRelations(ProductAbstract):
     pass  # related to NotSoftRelatedModel with a revers relation
 

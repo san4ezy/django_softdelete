@@ -110,6 +110,11 @@ def lead(name, product):
 
 
 @pytest.fixture
+def note(name, product):
+    return Note.objects.create(name=name, product=product)
+
+
+@pytest.fixture
 def product_image(name, product):
     return ProductImage.objects.create(name=name)
 

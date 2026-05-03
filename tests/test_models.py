@@ -421,6 +421,32 @@ class TestSoftDeleteModel:
         assert not another_product.is_deleted
         assert not another_option.is_deleted
 
+    def test_do_nothing_does_not_save_related(self, note):
+        """
+        on_delete=DO_NOTHING must be a true no-op: the related object's
+        save() must not be called when the parent is soft-deleted, otherwise
+        auto_now fields and save-side-effects fire spuriously.
+        """
+        product = note.product
+        initial_edited_at = note.edited_at
+
+        product.delete()
+
+        note.refresh_from_db()
+        assert note.edited_at == initial_edited_at
+        assert not note.is_deleted
+
+    def test_do_nothing_does_not_call_save_on_related(self, note):
+        """
+        Asserts directly that save() is not invoked on a DO_NOTHING-related
+        object during a soft-delete cascade walk.
+        """
+        product = note.product
+
+        with patch.object(Note, "save", autospec=True) as mock_save:
+            product.delete()
+            assert mock_save.call_count == 0
+
     def test_soft_delete_m2m(self, product, product_image_factory):
         image1 = product_image_factory()
         image2 = product_image_factory()
